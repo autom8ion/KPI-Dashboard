@@ -19,6 +19,16 @@ Then open:
 
 `make demo` seeds everything so the dashboards are populated immediately. To pull *real* GitHub Actions results instead: put a token in `.env` and run `make ingest`. See `make help`-equivalent targets in the [`Makefile`](Makefile): `up`, `down`, `bootstrap`, `seed`, `ingest`, `report`, `clean`.
 
+## Screenshots
+
+**QA Automation KPIs** — this repo's own dashboard: pass rate, CI success rate, flaky tests, per-repo trends, recent failures.
+
+![QA Automation KPIs dashboard](docs/screenshots/qa-automation-kpis-dashboard.jpg)
+
+**DORA** — DevLake's own dashboard, computed from the same seeded deployments/incidents.
+
+![DORA dashboard](docs/screenshots/dora-dashboard.jpg)
+
 ## What's real vs. seeded
 
 | Data | Source | Needs |
