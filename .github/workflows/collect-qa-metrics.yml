@@ -20,6 +20,11 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
+    # `if:` conditions can't reference `secrets` directly (GitHub Actions rejects the whole
+    # workflow file at parse time if they do) -- mirror the ones we need into job-level env
+    # first and gate on those instead.
+    env:
+      HAS_QA_POSTGRES_DSN: ${{ secrets.QA_POSTGRES_DSN != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,12 +32,12 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Ingest recent runs
-        if: ${{ secrets.QA_POSTGRES_DSN != '' }}
+        if: ${{ env.HAS_QA_POSTGRES_DSN == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           QA_POSTGRES_DSN: ${{ secrets.QA_POSTGRES_DSN }}
         run: python -m qa_collector.run
       - name: Skip (QA_POSTGRES_DSN not configured)
-        if: ${{ secrets.QA_POSTGRES_DSN == '' }}
+        if: ${{ env.HAS_QA_POSTGRES_DSN == 'false' }}
         run: |
           echo "::notice::QA_POSTGRES_DSN repo secret is not set, so there's no reachable qa-postgres to ingest into -- skipping. This is expected until a real qa-postgres is deployed; see this file's header comment. For local development use 'make demo' or 'make ingest' instead."

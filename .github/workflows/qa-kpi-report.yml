@@ -17,6 +17,14 @@ permissions:
 jobs:
   report:
     runs-on: ubuntu-latest
+    # `if:` conditions can't reference `secrets` directly (GitHub Actions rejects the whole
+    # workflow file at parse time if they do) -- mirror the ones we need into job-level env
+    # first and gate on those instead. This also fixes "Post to Slack" previously checking
+    # `env.SLACK_WEBHOOK_URL` against its *own* step's env, which is never populated in time
+    # for that same step's `if:` to see it.
+    env:
+      HAS_REPORT_SECRETS: ${{ secrets.QA_POSTGRES_DSN != '' && secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +32,7 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Generate report
-        if: ${{ secrets.QA_POSTGRES_DSN != '' && secrets.ANTHROPIC_API_KEY != '' }}
+        if: ${{ env.HAS_REPORT_SECRETS == 'true' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           QA_POSTGRES_DSN: ${{ secrets.QA_POSTGRES_DSN }}
@@ -35,12 +43,12 @@ jobs:
             --allowedTools "Read,Write,Bash"
 
       - name: Skip (required secrets not configured)
-        if: ${{ secrets.QA_POSTGRES_DSN == '' || secrets.ANTHROPIC_API_KEY == '' }}
+        if: ${{ env.HAS_REPORT_SECRETS == 'false' }}
         run: |
           echo "::notice::QA_POSTGRES_DSN and/or ANTHROPIC_API_KEY repo secrets are not set -- skipping report generation. This is expected until a real qa-postgres is deployed; see this file's header comment. For local development use 'make report' instead."
 
       - name: Commit report
-        if: ${{ secrets.QA_POSTGRES_DSN != '' && secrets.ANTHROPIC_API_KEY != '' }}
+        if: ${{ env.HAS_REPORT_SECRETS == 'true' }}
         run: |
           git config user.name "qa-kpi-report[bot]"
           git config user.email "qa-kpi-report@users.noreply.github.com"
@@ -49,7 +57,7 @@ jobs:
           git push
 
       - name: Post to Slack
-        if: ${{ env.SLACK_WEBHOOK_URL != '' && secrets.QA_POSTGRES_DSN != '' && secrets.ANTHROPIC_API_KEY != '' }}
+        if: ${{ env.HAS_SLACK_WEBHOOK == 'true' && env.HAS_REPORT_SECRETS == 'true' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
