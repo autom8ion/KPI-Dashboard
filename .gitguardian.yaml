@@ -1,0 +1,29 @@
+# GitGuardian ignore config (https://docs.gitguardian.com/ggshield-docs/reference/gitguardian-yaml).
+# Every entry here is a local-only demo/example credential documented in
+# README.md "What's real vs. seeded" and ARCHITECTURE.md -- never used
+# against a real system. Do not add a real secret to this ignore list;
+# if a genuine credential is ever accidentally committed, rotate it and
+# remove it from history instead of adding it here.
+version: 2
+
+secret:
+  ignored_paths:
+    # docker-compose.yml's mysql/grafana credentials (admin/merico) are
+    # Apache DevLake's own published example credentials, unmodified, from
+    # https://github.com/apache/devlake's own release docker-compose.yml --
+    # not something this repo introduced.
+    - "docker-compose.yml"
+    # Local-only Grafana datasource password for the qa-postgres demo DB.
+    - "grafana/provisioning/datasources/qa-postgres.yml"
+    # Template file: every value in it is either blank (real secrets like
+    # GITHUB_TOKEN/JIRA_API_TOKEN) or a documented local-only demo default
+    # (DevLake's own DB_URL merico credentials, qa-postgres's qa/qa). The
+    # actual `.env` a user creates from this is gitignored and never committed.
+    - ".env.example"
+
+  ignored_matches:
+    # qa-postgres's own default DSN (matches docker-compose.yml's
+    # POSTGRES_PASSWORD: qa), duplicated as a convenience fallback in
+    # qa_collector/db.py for running collector scripts without loading .env.
+    - name: qa-postgres demo DSN (local-only, matches docker-compose.yml)
+      match: "postgresql://qa:qa@localhost:5433/qa_metrics"
