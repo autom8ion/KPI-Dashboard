@@ -179,7 +179,7 @@ def seed_devlake_dora() -> None:
     ]
     for key, title, created, resolved in bugs:
         session.post(
-            f"{DEVLAKE_API_URL}/plugins/webhook/by-name/{WEBHOOK_CONN_NAME}/issues",
+            f"{DEVLAKE_API_URL}/plugins/webhook/connections/by-name/{WEBHOOK_CONN_NAME}/issues",
             json={
                 "issueKey": key,
                 "title": title,
@@ -196,7 +196,7 @@ def seed_devlake_dora() -> None:
     incident_created = now - timedelta(days=10)
     incident_resolved = incident_created + timedelta(hours=3, minutes=45)
     session.post(
-        f"{DEVLAKE_API_URL}/plugins/webhook/by-name/{WEBHOOK_CONN_NAME}/issues",
+        f"{DEVLAKE_API_URL}/plugins/webhook/connections/by-name/{WEBHOOK_CONN_NAME}/issues",
         json={
             "issueKey": "SEED-INC-1",
             "title": "Production checkout latency spike",

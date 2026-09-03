@@ -2,7 +2,7 @@
 #
 # The devlake/grafana/config-ui/mysql services below are Apache DevLake's own
 # official docker-compose.yml (https://github.com/apache/devlake, release
-# v1.0.3-beta16 docker-compose.yml + env.example) unmodified apart from
+# v1.0.3-beta15 docker-compose.yml + env.example) unmodified apart from
 # adding `qa-postgres` -- the collector's own database, deliberately kept
 # separate from DevLake's `lake` MySQL schema (see ARCHITECTURE.md for why).
 # Bump DEVLAKE_TAG in .env to track a newer DevLake release.
@@ -32,7 +32,7 @@ services:
       retries: 20
 
   grafana:
-    image: devlake.docker.scarf.sh/apache/devlake-dashboard:${DEVLAKE_TAG:-v1.0.3-beta16}
+    image: devlake.docker.scarf.sh/apache/devlake-dashboard:${DEVLAKE_TAG:-v1.0.3-beta15}
     ports:
       - "3002:3000"
     volumes:
@@ -53,6 +53,15 @@ services:
       # breaks Grafana's generated links against that baked-in setting.
       GF_SERVER_ROOT_URL: "http://localhost:4000/grafana"
       GF_USERS_DEFAULT_THEME: "light"
+      # DevLake's own entrypoint.sh authenticates to its local Grafana API as
+      # admin:$GF_SECURITY_ADMIN_PASSWORD to create the MySQL datasource +
+      # DORA dashboards on startup. Grafana defaults its own admin password
+      # to "admin" when this is unset, but entrypoint.sh interpolates the
+      # env var literally -- leaving it unset sends an empty password and
+      # entrypoint.sh's datasource-provisioning step fails silently (curl
+      # errors are swallowed with `|| true`), leaving the DORA/GitHub/Jira
+      # dashboards permanently empty. Must match the real admin password.
+      GF_SECURITY_ADMIN_PASSWORD: "admin"
       MYSQL_URL: mysql:3306
       MYSQL_DATABASE: lake
       MYSQL_USER: merico
@@ -71,7 +80,7 @@ services:
         condition: service_healthy
 
   devlake:
-    image: devlake.docker.scarf.sh/apache/devlake:${DEVLAKE_TAG:-v1.0.3-beta16}
+    image: devlake.docker.scarf.sh/apache/devlake:${DEVLAKE_TAG:-v1.0.3-beta15}
     ports:
       - "8080:8080"
     restart: always
@@ -92,7 +101,7 @@ services:
       retries: 40
 
   config-ui:
-    image: devlake.docker.scarf.sh/apache/devlake-config-ui:${DEVLAKE_TAG:-v1.0.3-beta16}
+    image: devlake.docker.scarf.sh/apache/devlake-config-ui:${DEVLAKE_TAG:-v1.0.3-beta15}
     ports:
       - "4000:4000"
     env_file:

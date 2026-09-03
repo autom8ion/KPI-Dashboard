@@ -2,7 +2,7 @@
 # Configure DevLake's connections + repo scopes via its REST config API
 # (config-as-code, not manual UI clicking) so `make demo` is reproducible.
 #
-# Verified against DevLake v1.0.3-beta16's actual API source
+# Verified against DevLake v1.0.3-beta15's actual API source
 # (backend/plugins/github/{api,models}/*.go) rather than guessed:
 #   POST /plugins/github/connections                    {name, endpoint, authMethod, token, enableGraphql}
 #   PUT  /plugins/github/connections/{id}/scopes         {data: [{fullName, scopeConfigId}, ...]}
