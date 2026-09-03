@@ -1,0 +1,22 @@
+# Registers qa-postgres as a second Grafana datasource, alongside the MySQL
+# datasource DevLake's own image provisions automatically. See
+# docker-compose.yml's grafana service comment for how this file gets
+# mounted without disturbing DevLake's own provisioning.
+apiVersion: 1
+
+datasources:
+  - name: qa-postgres
+    uid: qa-postgres
+    type: postgres
+    access: proxy
+    url: qa-postgres:5432
+    database: qa_metrics
+    user: qa
+    isDefault: false
+    editable: false
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: qa
