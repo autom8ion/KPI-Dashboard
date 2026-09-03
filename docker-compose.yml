@@ -1,0 +1,132 @@
+# QA Automation KPI Dashboard demo stack.
+#
+# The devlake/grafana/config-ui/mysql services below are Apache DevLake's own
+# official docker-compose.yml (https://github.com/apache/devlake, release
+# v1.0.3-beta16 docker-compose.yml + env.example) unmodified apart from
+# adding `qa-postgres` -- the collector's own database, deliberately kept
+# separate from DevLake's `lake` MySQL schema (see ARCHITECTURE.md for why).
+# Bump DEVLAKE_TAG in .env to track a newer DevLake release.
+version: "3"
+
+services:
+  mysql:
+    image: mysql:8
+    volumes:
+      - mysql-storage:/var/lib/mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: lake
+      MYSQL_USER: merico
+      MYSQL_PASSWORD: merico
+      TZ: UTC
+    command: --character-set-server=utf8mb4
+      --collation-server=utf8mb4_bin
+      --skip-log-bin
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  grafana:
+    image: devlake.docker.scarf.sh/apache/devlake-dashboard:${DEVLAKE_TAG:-v1.0.3-beta16}
+    ports:
+      - "3002:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      # DevLake's own entrypoint generates its MySQL datasource + DORA
+      # dashboard provisioning directly into /etc/grafana/provisioning at
+      # container start -- so these mount single EXTRA files alongside that,
+      # rather than replacing the provisioning directory (which would lose
+      # DevLake's own datasource/dashboards).
+      - ./grafana/provisioning/datasources/qa-postgres.yml:/etc/grafana/provisioning/datasources/qa-postgres.yml:ro
+      - ./grafana/provisioning/dashboards/dashboards.yml:/etc/grafana/provisioning/dashboards/qa-kpi-dashboards.yml:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards/kpi-dashboard:ro
+    environment:
+      # Matches upstream's own docker-compose.yml exactly: the image bakes
+      # GF_SERVER_SERVE_FROM_SUB_PATH=true, so ROOT_URL must keep the
+      # /grafana suffix and Grafana is reached via config-ui's proxy on
+      # :4000, not directly on :3002 -- changing this to a bare :3002 URL
+      # breaks Grafana's generated links against that baked-in setting.
+      GF_SERVER_ROOT_URL: "http://localhost:4000/grafana"
+      GF_USERS_DEFAULT_THEME: "light"
+      MYSQL_URL: mysql:3306
+      MYSQL_DATABASE: lake
+      MYSQL_USER: merico
+      MYSQL_PASSWORD: merico
+      QA_POSTGRES_HOST: qa-postgres
+      QA_POSTGRES_PORT: 5432
+      QA_POSTGRES_DATABASE: qa_metrics
+      QA_POSTGRES_USER: qa
+      QA_POSTGRES_PASSWORD: qa
+      TZ: UTC
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      qa-postgres:
+        condition: service_healthy
+
+  devlake:
+    image: devlake.docker.scarf.sh/apache/devlake:${DEVLAKE_TAG:-v1.0.3-beta16}
+    ports:
+      - "8080:8080"
+    restart: always
+    volumes:
+      - devlake-log:/app/logs
+    env_file:
+      - ./.env
+    environment:
+      LOGGING_DIR: /app/logs
+      TZ: UTC
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  config-ui:
+    image: devlake.docker.scarf.sh/apache/devlake-config-ui:${DEVLAKE_TAG:-v1.0.3-beta16}
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./.env
+    environment:
+      DEVLAKE_ENDPOINT: devlake:8080
+      GRAFANA_ENDPOINT: grafana:3000
+      TZ: UTC
+    depends_on:
+      - devlake
+
+  # Custom addition: qa_collector's own database (test_runs / test_case_results
+  # / flaky_tests). Not part of upstream DevLake. See ARCHITECTURE.md for why
+  # this is a separate database rather than extra tables in DevLake's MySQL.
+  qa-postgres:
+    image: postgres:16-alpine
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: qa
+      POSTGRES_PASSWORD: qa
+      POSTGRES_DB: qa_metrics
+    volumes:
+      - qa-postgres-storage:/var/lib/postgresql/data
+      - ./qa_collector/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qa -d qa_metrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mysql-storage:
+  grafana-storage:
+  devlake-log:
+  qa-postgres-storage:

@@ -1,0 +1,53 @@
+# Runs Claude Code headlessly against the qa-kpi-report skill to turn the
+# week's numbers into a narrative Markdown report, commits it to reports/,
+# and optionally posts it to Slack. Requires the same reachable-qa-postgres
+# assumption as collect-qa-metrics.yml (see its header comment) plus
+# ANTHROPIC_API_KEY. Locally, `make report` runs the same skill against
+# whatever `make demo`/`make ingest` populated.
+name: QA KPI report
+
+on:
+  schedule:
+    - cron: "0 14 * * MON" # Monday 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate report
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          QA_POSTGRES_DSN: ${{ secrets.QA_POSTGRES_DSN }}
+          DEVLAKE_API_URL: ${{ secrets.DEVLAKE_API_URL }}
+          DEVLAKE_GRAFANA_URL: ${{ secrets.DEVLAKE_GRAFANA_URL }}
+        run: |
+          claude -p "Use the qa-kpi-report skill to generate this week's QA KPI report and write it to reports/." \
+            --allowedTools "Read,Write,Bash"
+
+      - name: Commit report
+        run: |
+          git config user.name "qa-kpi-report[bot]"
+          git config user.email "qa-kpi-report@users.noreply.github.com"
+          git add reports/
+          git diff --cached --quiet || git commit -m "Add QA KPI report for $(date -u +%Y-%m-%d)"
+          git push
+
+      - name: Post to Slack
+        if: env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          latest_report=$(ls -t reports/*.md | head -1)
+          summary=$(head -c 3000 "$latest_report")
+          curl -sf -X POST "$SLACK_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$(python3 -c 'import json,sys; print(json.dumps({"text": sys.argv[1]}))' "$summary")"

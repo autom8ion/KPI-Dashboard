@@ -1,0 +1,18 @@
+# Adds a second dashboard provider alongside DevLake's own ("My Dashboard",
+# folder '', path /etc/grafana/dashboards -- baked into the image). This one
+# points at a distinct mounted subdirectory and folder so the two never
+# collide; see docker-compose.yml's grafana service.
+apiVersion: 1
+
+providers:
+  - name: qa-kpi-dashboards
+    org_id: 1
+    folder: "QA Automation"
+    type: file
+    disableDeletion: false
+    editable: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards/kpi-dashboard
+      foldersFromFilesStructure: false
