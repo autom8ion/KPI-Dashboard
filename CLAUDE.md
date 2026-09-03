@@ -29,8 +29,8 @@ make down / make clean       # tear down (clean also removes the local venv)
 ```
 qa_collector/        The DevLake gap-filler: fetch GitHub Actions artifacts, parse, normalize, load, flag flaky tests
   schema.sql          Owned schema for qa-postgres -- the source of truth, read it before writing a query against it
-  github_fetch.py      Lists workflow runs, downloads JUnit/k6-summary artifacts
-  parsers/             junit_parser.py (Playwright + pytest), k6_parser.py
+  github_fetch.py      Lists workflow runs, downloads JUnit/k6-summary/CTRF artifacts
+  parsers/             junit_parser.py (Playwright + pytest), k6_parser.py, ctrf_parser.py (framework-agnostic)
   normalize.py          Shared TestRun/TestCase shape + the one upsert write path
   flaky_detector.py     Pass/fail-alternation flakiness detection
   run.py                CLI entrypoint (python -m qa_collector.run)

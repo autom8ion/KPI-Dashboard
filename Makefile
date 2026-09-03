@@ -13,7 +13,10 @@ venv: $(VENV)/bin/activate
 
 .env:
 	cp .env.example .env
-	@echo "Created .env from .env.example -- edit it to add GITHUB_TOKEN for live data, or leave blank for seeded-only."
+	@$(PYTHON) -c "import re, secrets, pathlib; \
+		p = pathlib.Path('.env'); \
+		p.write_text(re.sub(r'^ENCRYPTION_SECRET=$$', 'ENCRYPTION_SECRET=' + secrets.token_hex(16), p.read_text(), flags=re.M))"
+	@echo "Created .env from .env.example (generated a fresh ENCRYPTION_SECRET) -- edit it to add GITHUB_TOKEN for live data, or leave blank for seeded-only."
 
 ## One command: bring the stack up, configure DevLake, seed sample data.
 demo: .env up bootstrap seed

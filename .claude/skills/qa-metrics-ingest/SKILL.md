@@ -23,10 +23,15 @@ Idempotent: re-running re-fetches and upserts (`qa_collector/normalize.py`'s `up
 
 | Artifact name | Repo | Parser |
 |---|---|---|
-| `junit-results` | playwright-agentic, backend-agentic | `parsers/junit_parser.py` |
-| `k6-summary`, `k6-db-summary` | k6-agentic | `parsers/k6_parser.py` |
+| `junit-results` | playwright-agentic, backend-agentic | `parsers/junit_parser.py` (`.xml`) |
+| `k6-summary`, `k6-db-summary` | k6-agentic | `parsers/k6_parser.py` (`.json`) |
+| `ctrf-report` | any repo with a [CTRF](https://ctrf.io) reporter | `parsers/ctrf_parser.py` (`.json`) |
+
+`.xml` files always go to the JUnit parser. `.json` files are **content-sniffed**, not routed by filename/artifact name (`run.py`'s `_cases_for_artifact`) -- `is_ctrf_report()` checks for `results.tests` before falling back to the k6-summary parser, so a CTRF artifact works even if a CI step named it something other than `ctrf-report` (as long as the name is in `KNOWN_ARTIFACT_NAMES`, or you add it there).
 
 Each artifact group becomes one `test_runs` row (job_name = artifact name), so e.g. k6-agentic's rest/graphql/db smoke jobs show up as separate rows under the same GitHub Actions run.
+
+CTRF's own `flaky: true` field (set by a reporter when a retry within the same run changed status -- a stronger signal than our own history-based detection) is surfaced as a `ctrf-flaky` tag on the test case rather than a schema change, so it flows through the same tag-breakdown panel as everything else.
 
 ## 3. Debugging a missing or wrong run
 
@@ -34,6 +39,7 @@ Each artifact group becomes one `test_runs` row (job_name = artifact name), so e
 - `GITHUB_TOKEN` needs `actions:read`/`contents:read` on all three sibling repos, not just KPI-Dashboard.
 - Wrong tags/suite grouping: read the comment at the top of `parsers/junit_parser.py` -- pytest tag inference is a heuristic (first path segment after `tests/`), not a real marker read, since default `--junitxml` drops markers.
 - k6 parsing looks empty/wrong: k6's `--summary-export` JSON shape has moved before; see the comment at the top of `parsers/k6_parser.py`, and check what k6-agentic's pinned k6 version actually emits with a manual `k6 run --summary-export=/tmp/s.json ...` before assuming the parser is broken.
+- A `.json` artifact got parsed as the wrong format: check `is_ctrf_report()` in `parsers/ctrf_parser.py` -- it only requires `results.tests` to be a list, so a k6 summary would misroute *to* CTRF only if it happened to have that exact shape (it doesn't, by default). If a custom k6 setup or a different tool's export does collide, tighten the sniff (e.g. also check `results.tool`) rather than switching back to name-based routing.
 
 ## 4. Backfilling more history
 
@@ -41,7 +47,7 @@ Bump `--limit` (default 20) -- `github_fetch.list_recent_runs` just raises `per_
 
 ## 5. Adding a new test-result format
 
-1. Add a `qa_collector/parsers/<format>_parser.py` with one function returning `list[qa_collector.normalize.TestCase]`, following `junit_parser.py`'s shape (it's the simplest reference).
-2. Wire it into `run.py`'s `_cases_for_artifact` by file extension or artifact-name prefix.
+1. Add a `qa_collector/parsers/<format>_parser.py` with one function returning `list[qa_collector.normalize.TestCase]`, following `junit_parser.py`'s shape (it's the simplest reference) -- or, if the framework has a CTRF reporter available, prefer producing CTRF in CI over writing a new parser at all (see `new-source-onboarding`).
+2. Wire it into `run.py`'s `_cases_for_artifact` by file extension, or content-sniff it the way `ctrf_parser.is_ctrf_report()` does if it shares an extension with an existing format.
 3. Add the new artifact name to `KNOWN_ARTIFACT_NAMES` in `github_fetch.py`.
 4. If it's for a genuinely new repo (not a new format for an existing one), use `new-source-onboarding` instead -- it covers this plus the DevLake and seed-data sides together.

@@ -17,7 +17,7 @@ GitHub Actions (autom8ion org)
   playwright-agentic, k6-agentic, backend-agentic, KPI-Dashboard
         │                                    │
         │ GitHub REST API                    │ CI artifacts
-        │ (commits, PRs, issues,             │ (JUnit XML, k6 summary JSON —
+        │ (commits, PRs, issues,             │ (JUnit XML, k6 summary JSON, CTRF —
         │  workflow runs)                    │  see sibling repos' CI changes)
         ▼                                    ▼
 ┌────────────────────────┐        ┌──────────────────────────┐

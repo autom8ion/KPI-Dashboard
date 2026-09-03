@@ -20,4 +20,8 @@ Average `duration_ms` per test-run-day, per repo. Tracked as a trend, not a sing
 
 ## Test tags
 
-Playwright tests carry their `@smoke`/`@regression`/`@api`/etc. tag directly in the reported test title (`qa_collector/parsers/junit_parser.py` extracts it with a regex); pytest tests don't carry markers into JUnit XML by default, so their "tag" is inferred from the `tests/<marker>/` directory convention `backend-agentic` uses. k6 checks/thresholds get synthetic tags `k6-check`/`k6-threshold` (see `qa_collector/parsers/k6_parser.py`) so they show up in the same failures-by-tag panel as functional tests, distinguishable from them.
+Playwright tests carry their `@smoke`/`@regression`/`@api`/etc. tag directly in the reported test title (`qa_collector/parsers/junit_parser.py` extracts it with a regex); pytest tests don't carry markers into JUnit XML by default, so their "tag" is inferred from the `tests/<marker>/` directory convention `backend-agentic` uses. k6 checks/thresholds get synthetic tags `k6-check`/`k6-threshold` (see `qa_collector/parsers/k6_parser.py`) so they show up in the same failures-by-tag panel as functional tests, distinguishable from them. A [CTRF](https://ctrf.io) report's own `tags` array is used as-is (`qa_collector/parsers/ctrf_parser.py`), plus a synthetic `ctrf-flaky` tag when the reporter set `flaky: true` on a test.
+
+## Ingestion format
+
+qa_collector accepts three input formats, auto-detected per artifact (see the `qa-metrics-ingest` skill for the exact dispatch rule): JUnit XML, a k6 `--summary-export` JSON file, or a [CTRF](https://ctrf.io) JSON report. CTRF is framework-agnostic (one parser covers Playwright/Jest/Mocha/Cypress/pytest/etc. reporters alike) and is the preferred format for onboarding a new repo — see `new-source-onboarding`.

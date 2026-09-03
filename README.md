@@ -24,7 +24,7 @@ Then open:
 | Data | Source | Needs |
 |---|---|---|
 | GitHub PRs, commits, issues, CI pipeline runs | DevLake's GitHub plugin | `GITHUB_TOKEN` in `.env` |
-| Test-case pass/fail/duration/flaky | `qa_collector` (this repo, JUnit/k6-summary artifacts) | `GITHUB_TOKEN`, plus the sibling repos' CI changes (already applied — see their `feat/qa-kpi-dashboard-integration` branches) |
+| Test-case pass/fail/duration/flaky | `qa_collector` (this repo, JUnit/k6-summary/CTRF artifacts) | `GITHUB_TOKEN`, plus the sibling repos' CI changes (already applied — see their `feat/qa-kpi-dashboard-integration` branches) |
 | DORA deployments/incidents/bugs | Seeded via DevLake's webhook plugin | nothing — synthetic by default |
 | Jira issues | Seeded (synthetic, Jira-shaped) | nothing by default; swap for a real Jira connection any time, see `docs/dora-metrics.md` |
 | Claude KPI report | `qa-kpi-report` skill (`make report`) | a working `claude` CLI locally, or `ANTHROPIC_API_KEY` in CI |

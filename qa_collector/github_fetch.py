@@ -1,9 +1,11 @@
 """GitHub Actions polling: list recently completed workflow runs for a repo
-and download the JUnit XML / k6 summary artifacts they published.
+and download the JUnit XML / k6 summary / CTRF artifacts they published.
 
 Artifact names match the sibling-repo CI changes made alongside this
 collector: `junit-results` (playwright-agentic, backend-agentic),
-`k6-summary` and `k6-db-summary` (k6-agentic).
+`k6-summary` and `k6-db-summary` (k6-agentic). `ctrf-report` is also
+recognized for any repo that publishes a CTRF (https://ctrf.io) JSON report
+instead of/in addition to JUnit XML -- see qa_collector/parsers/ctrf_parser.py.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ import requests
 
 GITHUB_API = "https://api.github.com"
 
-KNOWN_ARTIFACT_NAMES = {"junit-results", "k6-summary", "k6-db-summary"}
+KNOWN_ARTIFACT_NAMES = {"junit-results", "k6-summary", "k6-db-summary", "ctrf-report"}
 
 
 @dataclass

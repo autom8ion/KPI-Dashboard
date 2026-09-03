@@ -9,7 +9,8 @@ Goal: a new repo needs three independent pieces wired up -- this skill is the ch
 
 ## 1. CI must export a parseable test-result artifact
 
-- JUnit-XML-producing frameworks (most: JS/TS via Playwright/Jest/Mocha's junit reporters, Python via pytest `--junitxml`, Java/Kotlin via Maven/Gradle's default surefire output): add the reporter/flag, upload the XML as a workflow artifact named `junit-results` (matching `qa_collector.github_fetch.KNOWN_ARTIFACT_NAMES` -- or add a new name there, see step 2).
+- **Prefer a [CTRF](https://ctrf.io) reporter if the framework has one** (Jest, Mocha, Cypress, Playwright, pytest via `pytest-ctrf-json`, and most others do) -- upload the JSON as an artifact named `ctrf-report` (or add its name to `KNOWN_ARTIFACT_NAMES`; it's content-sniffed, not name-routed, so any recognized artifact name works). This avoids writing a new parser at all, and CTRF's own `flaky`/`retries` fields give a better signal than JUnit XML carries.
+- JUnit-XML-producing frameworks without a good CTRF reporter (Java/Kotlin via Maven/Gradle's default surefire output, etc.): add the flag, upload the XML as a workflow artifact named `junit-results` (matching `qa_collector.github_fetch.KNOWN_ARTIFACT_NAMES` -- or add a new name there, see step 2).
 - k6: `--summary-export=<path>.json`, upload as an artifact name starting with `k6-` (see k6-agentic's CI for the two-step pattern needed when a job runs multiple k6 scripts, to avoid one export overwriting another).
 - Anything else (a format qa_collector doesn't parse yet): see the `qa-metrics-ingest` skill's "Adding a new test-result format" section first.
 

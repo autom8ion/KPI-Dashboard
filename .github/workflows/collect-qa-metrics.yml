@@ -1,5 +1,5 @@
 # Polls playwright-agentic, backend-agentic and k6-agentic for newly
-# completed workflow runs and ingests their JUnit/k6-summary artifacts into
+# completed workflow runs and ingests their JUnit/k6-summary/CTRF artifacts into
 # qa-postgres. This is the "always-on" path for a real deployment where
 # qa-postgres is a persistently hosted database (not the local
 # docker-compose one `make demo` brings up) -- for the local demo, run
@@ -27,7 +27,12 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Ingest recent runs
+        if: ${{ secrets.QA_POSTGRES_DSN != '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           QA_POSTGRES_DSN: ${{ secrets.QA_POSTGRES_DSN }}
         run: python -m qa_collector.run
+      - name: Skip (QA_POSTGRES_DSN not configured)
+        if: ${{ secrets.QA_POSTGRES_DSN == '' }}
+        run: |
+          echo "::notice::QA_POSTGRES_DSN repo secret is not set, so there's no reachable qa-postgres to ingest into -- skipping. This is expected until a real qa-postgres is deployed; see this file's header comment. For local development use 'make demo' or 'make ingest' instead."
