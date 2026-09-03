@@ -1,6 +1,6 @@
 """qa_collector CLI: pull recent GitHub Actions runs for one or all
-configured repos, parse their JUnit/k6-summary artifacts, load them into
-qa-postgres, then recompute the flaky-test leaderboard.
+configured repos, parse their JUnit/k6-summary/CTRF artifacts, load them
+into qa-postgres, then recompute the flaky-test leaderboard.
 
     python -m qa_collector.run                        # all repos, last 20 runs each
     python -m qa_collector.run --repo playwright-agentic --limit 5
@@ -15,6 +15,7 @@ import sys
 from qa_collector import db, github_fetch
 from qa_collector.flaky_detector import detect_flaky_tests
 from qa_collector.normalize import TestRun, upsert_test_run
+from qa_collector.parsers.ctrf_parser import is_ctrf_report, parse_ctrf
 from qa_collector.parsers.junit_parser import parse_junit_xml
 from qa_collector.parsers.k6_parser import parse_k6_summary
 
@@ -25,13 +26,18 @@ REPOS = {
 }
 
 
-def _cases_for_artifact(artifact_key: str, raw: bytes, workflow_name: str) -> list:
+def _cases_for_artifact(artifact_key: str, raw: bytes, workflow_name: str) -> tuple[str, list]:
+    """Returns (source, cases). JSON artifacts are content-sniffed (CTRF vs.
+    k6 summary) rather than routed by artifact/file name, so this works
+    regardless of what a CI step happened to call the uploaded file."""
     if artifact_key.endswith(".xml"):
-        return parse_junit_xml(raw)
+        return "junit", parse_junit_xml(raw)
     if artifact_key.endswith(".json"):
-        summary = json.loads(raw)
-        return parse_k6_summary(summary, suite=workflow_name)
-    return []
+        data = json.loads(raw)
+        if is_ctrf_report(data):
+            return "ctrf", parse_ctrf(data, default_suite=workflow_name)
+        return "k6-summary", parse_k6_summary(data, suite=workflow_name)
+    return "unknown", []
 
 
 def ingest_repo(conn, repo_id: str, limit: int) -> int:
@@ -53,8 +59,12 @@ def ingest_repo(conn, repo_id: str, limit: int) -> int:
 
         for artifact_name, members in by_artifact.items():
             cases = []
+            source = "unknown"
             for key, raw in members:
-                cases.extend(_cases_for_artifact(key, raw, run.workflow_name))
+                file_source, file_cases = _cases_for_artifact(key, raw, run.workflow_name)
+                if file_cases:
+                    source = file_source
+                    cases.extend(file_cases)
             if not cases:
                 continue
 
@@ -69,7 +79,7 @@ def ingest_repo(conn, repo_id: str, limit: int) -> int:
                 started_at=run.started_at,
                 finished_at=run.finished_at,
                 conclusion=run.conclusion,
-                source="k6-summary" if artifact_name.startswith("k6") else "junit",
+                source=source,
                 cases=cases,
             )
             upsert_test_run(conn, test_run)

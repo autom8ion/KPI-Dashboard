@@ -1,5 +1,5 @@
 # Polls playwright-agentic, backend-agentic and k6-agentic for newly
-# completed workflow runs and ingests their JUnit/k6-summary artifacts into
+# completed workflow runs and ingests their JUnit/k6-summary/CTRF artifacts into
 # qa-postgres. This is the "always-on" path for a real deployment where
 # qa-postgres is a persistently hosted database (not the local
 # docker-compose one `make demo` brings up) -- for the local demo, run
