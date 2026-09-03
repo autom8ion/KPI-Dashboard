@@ -29,6 +29,24 @@ Then open:
 | Jira issues | Seeded (synthetic, Jira-shaped) | nothing by default; swap for a real Jira connection any time, see `docs/dora-metrics.md` |
 | Claude KPI report | `qa-kpi-report` skill (`make report`) | a working `claude` CLI locally, or `ANTHROPIC_API_KEY` in CI |
 
+## Example report
+
+`make report` (or the `qa-kpi-report.yml` workflow) runs the `qa-kpi-report` skill to turn the
+week's numbers into a short narrative like this one. [`reports/2026-09-03.md`](reports/2026-09-03.md)
+is a real example generated against `make demo`'s synthetic seed data:
+
+> Overall pass rate slipped from 94.3% to 86.7% week-over-week, driven almost entirely by
+> `backend-agentic`: its GraphQL suite's `test_query_order` started failing on 2026-08-28 and
+> hasn't recovered, dragging that repo's CI success rate to 0% for the week (down from 57.1%).
+> `playwright-agentic` also softened (CI success 71.4% → 50.0%) but stayed above a 90% pass
+> rate; `k6-agentic` held steady at 100%.
+>
+> **Recommended actions:** quarantine `test_query_order` and investigate the GraphQL
+> schema/resolver change around 2026-08-28 — it's the single highest-leverage fix...
+
+See the full file for the DORA/regressions/flaky-tests breakdown and the rest of the
+recommendations.
+
 ## Repo layout
 
 ```
