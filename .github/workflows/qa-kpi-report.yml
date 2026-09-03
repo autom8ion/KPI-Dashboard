@@ -24,6 +24,7 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Generate report
+        if: ${{ secrets.QA_POSTGRES_DSN != '' && secrets.ANTHROPIC_API_KEY != '' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           QA_POSTGRES_DSN: ${{ secrets.QA_POSTGRES_DSN }}
@@ -33,7 +34,13 @@ jobs:
           claude -p "Use the qa-kpi-report skill to generate this week's QA KPI report and write it to reports/." \
             --allowedTools "Read,Write,Bash"
 
+      - name: Skip (required secrets not configured)
+        if: ${{ secrets.QA_POSTGRES_DSN == '' || secrets.ANTHROPIC_API_KEY == '' }}
+        run: |
+          echo "::notice::QA_POSTGRES_DSN and/or ANTHROPIC_API_KEY repo secrets are not set -- skipping report generation. This is expected until a real qa-postgres is deployed; see this file's header comment. For local development use 'make report' instead."
+
       - name: Commit report
+        if: ${{ secrets.QA_POSTGRES_DSN != '' && secrets.ANTHROPIC_API_KEY != '' }}
         run: |
           git config user.name "qa-kpi-report[bot]"
           git config user.email "qa-kpi-report@users.noreply.github.com"
@@ -42,7 +49,7 @@ jobs:
           git push
 
       - name: Post to Slack
-        if: env.SLACK_WEBHOOK_URL != ''
+        if: ${{ env.SLACK_WEBHOOK_URL != '' && secrets.QA_POSTGRES_DSN != '' && secrets.ANTHROPIC_API_KEY != '' }}
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
