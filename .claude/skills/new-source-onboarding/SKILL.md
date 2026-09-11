@@ -14,13 +14,13 @@ Goal: a new repo needs three independent pieces wired up -- this skill is the ch
 - k6: `--summary-export=<path>.json`, upload as an artifact name starting with `k6-` (see k6-agentic's CI for the two-step pattern needed when a job runs multiple k6 scripts, to avoid one export overwriting another).
 - Anything else (a format qa_collector doesn't parse yet): see the `qa-metrics-ingest` skill's "Adding a new test-result format" section first.
 
-## 2. qa_collector needs to know about the repo
+## 2. Add the repo to config/sources.yaml
 
-In `qa_collector/run.py`'s `REPOS` dict, add `"<repo>": {"org": "...", "framework": "..."}`. In `qa_collector/schema.sql`'s seed `INSERT INTO repos`, add the matching row (or insert it directly -- the `ON CONFLICT DO NOTHING` makes either safe). If the new artifact name isn't already in `github_fetch.KNOWN_ARTIFACT_NAMES`, add it there too.
+Add an entry under `repos:` in `config/sources.yaml` -- `id: <repo>` plus `framework: playwright | pytest | k6` if you want `qa_collector` to ingest its test results (omit `framework` for DevLake-scope-only, e.g. a repo with no test-result artifacts). This one edit is enough for both `qa_collector` (it reads the config via `qa_collector/config.py`, and `qa_collector/db.py`'s `ensure_schema()` syncs the `repos` table from it on the next run) and `devlake/scripts/bootstrap.sh` (next step) -- no code edit needed. If the new artifact name isn't already in `github_fetch.KNOWN_ARTIFACT_NAMES`, add it there too.
 
 ## 3. DevLake needs the repo as a scope (for DORA/PR/issue data)
 
-Add the repo name to the `REPOS` array in `devlake/scripts/bootstrap.sh` and re-run it (see the `devlake-bootstrap` skill). If this is a real deployable application (not another test-framework repo like the current three), also set `DEPLOYMENT_PATTERN`/`PRODUCTION_PATTERN` env vars before running bootstrap -- see that script's comment for why they're blank by default for playwright-agentic/k6-agentic/backend-agentic.
+Re-run `make bootstrap` (or `bash devlake/scripts/bootstrap.sh` with `PYTHON_BIN` pointed at a Python that has PyYAML installed -- see the `devlake-bootstrap` skill) -- it reads the same `config/sources.yaml` and adds every listed repo as a scope. If this is a real deployable application (not another test-framework repo like the current three), also set `DEPLOYMENT_PATTERN`/`PRODUCTION_PATTERN` env vars before running bootstrap -- see that script's comment for why they're blank by default for playwright-agentic/k6-agentic/backend-agentic.
 
 ## 4. Grafana
 

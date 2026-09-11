@@ -1,7 +1,10 @@
 # Adds a second dashboard provider alongside DevLake's own ("My Dashboard",
-# folder '', path /etc/grafana/dashboards -- baked into the image). This one
-# points at a distinct mounted subdirectory and folder so the two never
-# collide; see docker-compose.yml's grafana service.
+# folder '', path /etc/grafana/dashboards -- baked into the image, and
+# recursive). This one's path must stay disjoint from that tree -- a
+# subdirectory of it is NOT enough, DevLake's provider would still see the
+# files and Grafana would treat the resulting duplicate UIDs as a
+# provisioning conflict, freezing writes from both providers. See
+# docker-compose.yml's grafana service for the mount.
 apiVersion: 1
 
 providers:
@@ -14,5 +17,5 @@ providers:
     updateIntervalSeconds: 30
     allowUiUpdates: false
     options:
-      path: /etc/grafana/dashboards/kpi-dashboard
+      path: /etc/grafana/kpi-dashboards
       foldersFromFilesStructure: false

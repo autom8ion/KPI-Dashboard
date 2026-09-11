@@ -1,6 +1,6 @@
 # KPI-Dashboard
 
-QA Automation KPI Dashboard -- a fully worked example of Apache DevLake + Grafana OSS for engineering/DORA analytics, extended with a small custom pipeline for test-level QA KPIs (pass rate, flaky tests, CI health) that DevLake doesn't natively ingest. Built to demo against three sibling repos in this org (`playwright-agentic`, `k6-agentic`, `backend-agentic`) and works out of the box on synthetic data with zero credentials.
+QA Automation KPI Dashboard -- a fully worked example of Apache DevLake + Grafana OSS for engineering/DORA analytics, extended with a small custom pipeline for test-level QA KPIs (pass rate, flaky tests, CI health) that DevLake doesn't natively ingest. Ships demoed against three sibling repos in this org (`playwright-agentic`, `k6-agentic`, `backend-agentic`) with synthetic data and zero credentials, and is config-driven -- see "Plugging in your own repos" below to point the whole stack at a different org/SDLC by editing one file.
 
 See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full design and the reasoning behind each piece.
 
@@ -19,9 +19,19 @@ Then open:
 
 `make demo` seeds everything so the dashboards are populated immediately. To pull *real* GitHub Actions results instead: put a token in `.env` and run `make ingest`. See `make help`-equivalent targets in the [`Makefile`](Makefile): `up`, `down`, `bootstrap`, `seed`, `ingest`, `report`, `clean`.
 
+## Plugging in your own repos
+
+Everything org/repo-specific lives in one file: [`config/sources.yaml`](config/sources.yaml). To point this whole stack -- `qa_collector`'s ingestion, `devlake/scripts/bootstrap.sh`'s GitHub connection/scopes, and the demo seed data -- at a different SDLC:
+
+1. Edit `config/sources.yaml`: set `github_org`, and list each repo you want tracked. Give a repo a `framework: playwright | pytest | k6` if you want `qa_collector` to ingest its JUnit/k6-summary/CTRF test results; omit `framework` for a repo you only want DevLake's DORA/PR/issue signal from (see `qa_collector/config.py`'s docstring for the exact shape).
+2. If any of those repos publish a test-result artifact in a format `qa_collector` doesn't parse yet, see the `qa-metrics-ingest` skill's "Adding a new test-result format" section.
+3. Put a GitHub PAT with read access to those repos in `.env` (`GITHUB_TOKEN`), and run `make demo` (or `make bootstrap && make ingest` if the stack is already up).
+
+No other file needs editing -- `make bootstrap`/`make seed`/`make ingest` all read the same config. See the `new-source-onboarding` skill for the full checklist (CI export format, Grafana panels, verification steps).
+
 ## Screenshots
 
-**QA Automation KPIs** — this repo's own dashboard: pass rate, CI success rate, flaky tests, per-repo trends, recent failures.
+**QA Automation KPIs** — this repo's own dashboard: pass rate, CI success rate, flaky tests, per-repo trends, recent failures. A `$repo` filter scopes every panel, and summary panels (per-repo bars/trend lines, failure tags) link into filtered/detail views -- clicking a repo or tag re-filters the dashboard, and clicking a test name drills into **QA Test Case History** (`grafana/dashboards/qa-test-case-history.json`), which has its own run-by-run timeline plus direct links out to the GitHub Actions run and commit.
 
 ![QA Automation KPIs dashboard](docs/screenshots/qa-automation-kpis-dashboard.jpg)
 
@@ -60,13 +70,14 @@ recommendations.
 ## Repo layout
 
 ```
-qa_collector/        Test-result ingestion: GitHub Actions artifacts -> qa-postgres
-devlake/scripts/      DevLake connection/scope config-as-code
-scripts/seed/          Synthetic demo data generator
-grafana/               Provisioned datasource + the QA Automation KPIs dashboard
-docs/                  Metric definitions and DORA source mapping
-.github/workflows/     The always-on ingestion + weekly report pipelines (for a real deployment)
-.claude/skills/        Claude Code skills for operating this stack (see CLAUDE.md)
+config/sources.yaml    The one file to edit to point this at a different org/repos
+qa_collector/           Test-result ingestion: GitHub Actions artifacts -> qa-postgres
+devlake/scripts/         DevLake connection/scope config-as-code
+scripts/seed/             Synthetic demo data generator
+grafana/                  Provisioned datasource + the QA Automation KPIs / Test Case History dashboards
+docs/                     Metric definitions and DORA source mapping
+.github/workflows/        The always-on ingestion + weekly report pipelines (for a real deployment)
+.claude/skills/           Claude Code skills for operating this stack (see CLAUDE.md)
 ```
 
 ## Why these three repos

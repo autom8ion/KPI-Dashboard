@@ -9,13 +9,19 @@ Goal: get DevLake's GitHub connection, repo scopes, and DORA scope-config into a
 
 ## What's scripted vs. manual
 
-`devlake/scripts/bootstrap.sh` is idempotent and handles: the `autom8ion-github` connection, the `qa-automation-dora` scope config (issue-type mapping + deployment/production regex), and attaching the four `autom8ion` repos as scopes. It does **not** create the DevLake Project or Blueprint -- see the comment at the top of that script for why (DevLake's own maintainers recommend the Config UI wizard for that step; a hand-crafted blueprint JSON payload is the part of the API that's genuinely fragile to script correctly).
+`devlake/scripts/bootstrap.sh` is idempotent and handles: the `<github_org>-github` connection, the `qa-automation-dora` scope config (issue-type mapping + deployment/production regex), and attaching every repo listed in `config/sources.yaml` as a scope. `github_org` and the repo list come from that config file (via `qa_collector/config.py`), not from the script itself -- edit `config/sources.yaml` to change either. It does **not** create the DevLake Project or Blueprint -- see the comment at the top of that script for why (DevLake's own maintainers recommend the Config UI wizard for that step; a hand-crafted blueprint JSON payload is the part of the API that's genuinely fragile to script correctly).
 
 ## 1. Run/re-run bootstrap
 
 ```bash
+make bootstrap
+```
+
+or, without `make` (needs a Python with PyYAML installed, since `config/sources.yaml` needs parsing):
+
+```bash
 set -a && . ./.env && set +a
-bash devlake/scripts/bootstrap.sh
+PYTHON_BIN=.venv/bin/python bash devlake/scripts/bootstrap.sh
 ```
 
 Safe to re-run any time -- it looks up existing connections/scope-configs by name before creating new ones. If `GITHUB_TOKEN` is blank in `.env`, it exits early and prints why (the demo still works off seeded data).
@@ -33,7 +39,7 @@ Follow the script's printed instructions: `http://localhost:4000` -> Projects ->
 
 ## 4. Swapping seeded Jira for a real instance
 
-Set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` in `.env` and re-run `bash devlake/scripts/bootstrap.sh` -- it creates an `autom8ion-jira` connection. Then in the Config UI: Connections -> autom8ion-jira -> Add Data Scope -> pick the board(s). Add that connection's scopes to the "qa-automation" project the same way as GitHub's. From then on, real Jira issues (not `scripts/seed/generate_sample_data.py`'s synthetic ones) drive the bug-trend and MTTR panels -- see `docs/dora-metrics.md`.
+Set `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` in `.env` and re-run bootstrap -- it creates a `<github_org>-jira` connection. Then in the Config UI: Connections -> `<github_org>-jira` -> Add Data Scope -> pick the board(s). Add that connection's scopes to the "qa-automation" project the same way as GitHub's. From then on, real Jira issues (not `scripts/seed/generate_sample_data.py`'s synthetic ones) drive the bug-trend and MTTR panels -- see `docs/dora-metrics.md`.
 
 ## 5. Adding a repo/connection later
 

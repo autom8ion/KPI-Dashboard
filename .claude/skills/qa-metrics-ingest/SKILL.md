@@ -11,9 +11,11 @@ Goal: get real (not seeded) test-case-level data from GitHub Actions artifacts i
 
 ```bash
 set -a && . ./.env && set +a           # needs GITHUB_TOKEN, QA_POSTGRES_DSN
-python -m qa_collector.run                                    # all three repos, last 20 runs each
+python -m qa_collector.run                                    # every repo in config/sources.yaml with a framework set
 python -m qa_collector.run --repo playwright-agentic --limit 5
 ```
+
+Which repos it knows about, and which parser each one routes to, comes from `config/sources.yaml` (via `qa_collector/config.py`) -- not a hardcoded list in `run.py`. See README.md "Plugging in your own repos".
 
 Idempotent: re-running re-fetches and upserts (`qa_collector/normalize.py`'s `upsert_test_run`) rather than duplicating rows, keyed on `(repo_id, workflow_run_id, job_name)`. It also runs the flaky-test detector (`qa_collector/flaky_detector.py`) at the end of every ingest -- no separate step needed.
 
@@ -36,7 +38,7 @@ CTRF's own `flaky: true` field (set by a reporter when a retry within the same r
 ## 3. Debugging a missing or wrong run
 
 - Nothing ingested for a repo: check the run actually uploaded a known artifact (`gh run view <run-id> --repo autom8ion/<repo>`) -- a run that failed before the upload step (e.g. lint failure) has nothing to pull.
-- `GITHUB_TOKEN` needs `actions:read`/`contents:read` on all three sibling repos, not just KPI-Dashboard.
+- `GITHUB_TOKEN` needs `actions:read`/`contents:read` on every repo in `config/sources.yaml`, not just KPI-Dashboard.
 - Wrong tags/suite grouping: read the comment at the top of `parsers/junit_parser.py` -- pytest tag inference is a heuristic (first path segment after `tests/`), not a real marker read, since default `--junitxml` drops markers.
 - k6 parsing looks empty/wrong: k6's `--summary-export` JSON shape has moved before; see the comment at the top of `parsers/k6_parser.py`, and check what k6-agentic's pinned k6 version actually emits with a manual `k6 run --summary-export=/tmp/s.json ...` before assuming the parser is broken.
 - A `.json` artifact got parsed as the wrong format: check `is_ctrf_report()` in `parsers/ctrf_parser.py` -- it only requires `results.tests` to be a list, so a k6 summary would misroute *to* CTRF only if it happened to have that exact shape (it doesn't, by default). If a custom k6 setup or a different tool's export does collide, tighten the sniff (e.g. also check `results.tool`) rather than switching back to name-based routing.

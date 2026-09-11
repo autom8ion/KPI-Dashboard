@@ -2,9 +2,9 @@
 fully populated dashboard with zero live credentials.
 
 Writes to two places:
-  - qa-postgres (via qa_collector.normalize) -- test runs/cases for all
-    three sibling repos, with a couple of deliberately flaky tests and one
-    visible regression.
+  - qa-postgres (via qa_collector.normalize) -- test runs/cases for every
+    repo in config/sources.yaml, with a couple of deliberately flaky tests
+    and one visible regression on this demo's three default repos.
   - DevLake, via its webhook plugin (verified against v1.0.3-beta16's
     backend/plugins/webhook/api/*.go) -- synthetic deployments and
     Jira-shaped issues (bugs/incidents), so the DORA Overview dashboard has
@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 from qa_collector import db
+from qa_collector.config import load as load_sources_config
 from qa_collector.normalize import TestCase, TestRun, upsert_test_run
 
 RNG = random.Random(20260101)
@@ -33,7 +34,24 @@ DAYS = 30
 DEVLAKE_API_URL = os.environ.get("DEVLAKE_API_URL", "http://localhost:8080")
 WEBHOOK_CONN_NAME = "qa-automation-seed"
 
+_SOURCES = load_sources_config()
+
+
+def _generic_suites(repo_id: str) -> dict[str, list[str]]:
+    """Fallback demo suite for a repo in config/sources.yaml that isn't one
+    of the three curated below -- so plugging in a new repo still gets a
+    populated demo dashboard without editing this file."""
+    return {
+        f"tests/{repo_id}/smoke": ["test critical path works @smoke", "test handles errors @smoke"],
+        f"tests/{repo_id}/regression": ["test regression scenario one @regression"],
+    }
+
+
+# Generic suites for every configured repo, overridden below with richer
+# curated content for the three repos this demo ships tuned for -- any
+# other repo in config/sources.yaml still gets seeded via the generic ones.
 REPO_SUITES = {
+    **{repo_id: _generic_suites(repo_id) for repo_id in _SOURCES.qa_collector_repos()},
     "playwright-agentic": {
         "tests/app/functional/login.spec.ts": [
             "test logs in with valid credentials @smoke",
@@ -56,6 +74,9 @@ REPO_SUITES = {
         "tests/graphql/smoke.ts": ["threshold: http_req_duration p(95)<800", "no errors in response"],
     },
 }
+# Only keep curated/generic entries for repos actually present in config
+# (so removing a repo from config/sources.yaml removes it from the demo too).
+REPO_SUITES = {k: v for k, v in REPO_SUITES.items() if k in _SOURCES.qa_collector_repos()}
 
 # Deliberately flaky: alternates pass/fail across the seeded window, so the
 # "flaky test leaderboard" panel has something to show on first run.
@@ -145,6 +166,8 @@ def seed_devlake_dora() -> None:
         return
 
     now = datetime.now(timezone.utc)
+    deploy_repo_id = next(iter(_SOURCES.qa_collector_repos()), "app")
+    deploy_repo_url = f"https://github.com/{_SOURCES.github_org}/{deploy_repo_id}"
 
     for day_index in range(DAYS):
         deploy_time = now - timedelta(days=DAYS - day_index, hours=RNG.randint(0, 8))
@@ -161,7 +184,7 @@ def seed_devlake_dora() -> None:
                 "finishedDate": finished.isoformat(),
                 "deploymentCommits": [
                     {
-                        "repoUrl": "https://github.com/autom8ion/backend-agentic",
+                        "repoUrl": deploy_repo_url,
                         "commitSha": f"{RNG.getrandbits(160):040x}",
                         "refName": "refs/heads/main",
                         "result": "FAILURE" if failed else "SUCCESS",

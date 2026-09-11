@@ -6,8 +6,10 @@
 -- nothing here depends on DevLake's own schema, so it survives independent
 -- upgrades of either side. See ARCHITECTURE.md.
 
+-- Rows are synced from config/sources.yaml by qa_collector/db.py's
+-- ensure_schema() on every run, not seeded here -- see that module.
 CREATE TABLE IF NOT EXISTS repos (
-    id              TEXT PRIMARY KEY,           -- e.g. 'playwright-agentic', matches qa_collector config
+    id              TEXT PRIMARY KEY,           -- matches config/sources.yaml's repo id
     github_org      TEXT NOT NULL,
     github_repo     TEXT NOT NULL,
     framework       TEXT NOT NULL,               -- 'playwright' | 'pytest' | 'k6'
@@ -90,9 +92,3 @@ SELECT
     tr.started_at   AS run_started_at
 FROM test_case_results tcr
 JOIN test_runs tr ON tr.id = tcr.test_run_id;
-
-INSERT INTO repos (id, github_org, github_repo, framework) VALUES
-    ('playwright-agentic', 'autom8ion', 'playwright-agentic', 'playwright'),
-    ('backend-agentic',    'autom8ion', 'backend-agentic',    'pytest'),
-    ('k6-agentic',         'autom8ion', 'k6-agentic',         'k6')
-ON CONFLICT (id) DO NOTHING;

@@ -27,7 +27,10 @@ make down / make clean       # tear down (clean also removes the local venv)
 ## Directory map
 
 ```
+config/sources.yaml   Single source of truth for which GitHub org/repos this dashboard watches --
+                      edit this, not code, to plug in a different SDLC. See qa_collector/config.py.
 qa_collector/        The DevLake gap-filler: fetch GitHub Actions artifacts, parse, normalize, load, flag flaky tests
+  config.py            Loads config/sources.yaml (also a CLI, for devlake/scripts/bootstrap.sh's bash)
   schema.sql          Owned schema for qa-postgres -- the source of truth, read it before writing a query against it
   github_fetch.py      Lists workflow runs, downloads JUnit/k6-summary/CTRF artifacts
   parsers/             junit_parser.py (Playwright + pytest), k6_parser.py, ctrf_parser.py (framework-agnostic)

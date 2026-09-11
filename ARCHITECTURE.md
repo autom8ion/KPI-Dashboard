@@ -72,7 +72,7 @@ DevLake owns and migrates its own schema (`_tool_*`, domain-layer tables) as par
 
 See `qa_collector/schema.sql` for the authoritative definitions (kept in one file deliberately, so it's never out of sync with itself). Summary:
 
-- **`repos`** — the three (four, including this repo) known source repos.
+- **`repos`** — the three (four, including this repo) known source repos, synced on every run from `config/sources.yaml` (the single source of truth `qa_collector`, `devlake/scripts/bootstrap.sh`, and the seed script all read through — see `qa_collector/config.py` and README.md "Plugging in your own repos").
 - **`test_runs`** — one row per (repo, GitHub Actions workflow run, artifact group/job). Idempotent upsert key: `(repo_id, workflow_run_id, job_name)`.
 - **`test_case_results`** — one row per test case per run, `ON DELETE CASCADE` from `test_runs`.
 - **`flaky_tests`** — maintained by `qa_collector/flaky_detector.py`, recomputed on every ingest.
