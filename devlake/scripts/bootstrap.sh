@@ -19,7 +19,6 @@
 set -euo pipefail
 
 : "${DEVLAKE_API_URL:=http://localhost:8080}"
-: "${GITHUB_ORG:=autom8ion}"
 : "${GITHUB_TOKEN:=}"
 : "${JIRA_URL:=}"
 : "${JIRA_EMAIL:=}"
@@ -34,9 +33,15 @@ set -euo pipefail
 # repo's workflow/environment names if you connect one.
 : "${DEPLOYMENT_PATTERN:=}"
 : "${PRODUCTION_PATTERN:=}"
+# python3 by default; `make bootstrap` passes the project venv's python so
+# `qa_collector.config` (needs PyYAML) resolves without a global install.
+: "${PYTHON_BIN:=python3}"
 
-REPOS=("playwright-agentic" "k6-agentic" "backend-agentic" "KPI-Dashboard")
-CONN_NAME="autom8ion-github"
+# GITHUB_ORG and REPOS come from config/sources.yaml -- the single place to
+# edit to point this whole stack at a different org's repos. See
+# qa_collector/config.py and README.md "Plugging in your own repos".
+eval "$("$PYTHON_BIN" -m qa_collector.config --format shell)"
+CONN_NAME="${GITHUB_ORG}-github"
 
 if [[ -z "$GITHUB_TOKEN" ]]; then
     echo "GITHUB_TOKEN not set -- skipping DevLake GitHub connection setup."
@@ -51,7 +56,7 @@ until curl -sf "$DEVLAKE_API_URL/ping" >/dev/null 2>&1; do sleep 2; done
 
 echo "Looking for an existing '$CONN_NAME' GitHub connection..."
 existing_id=$(curl -sf "$DEVLAKE_API_URL/plugins/github/connections" \
-    | python3 -c "import json,sys; conns=json.load(sys.stdin); print(next((c['id'] for c in conns if c['name']=='$CONN_NAME'), ''))")
+    | "$PYTHON_BIN" -c "import json,sys; conns=json.load(sys.stdin); print(next((c['id'] for c in conns if c['name']=='$CONN_NAME'), ''))")
 
 if [[ -n "$existing_id" ]]; then
     connection_id="$existing_id"
@@ -61,25 +66,25 @@ else
     connection_id=$(curl -sf -X POST "$DEVLAKE_API_URL/plugins/github/connections" \
         -H "Content-Type: application/json" \
         -d "{\"name\": \"$CONN_NAME\", \"endpoint\": \"https://api.github.com/\", \"authMethod\": \"AccessToken\", \"token\": \"$GITHUB_TOKEN\", \"enableGraphql\": true}" \
-        | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+        | "$PYTHON_BIN" -c "import json,sys; print(json.load(sys.stdin)['id'])")
     echo "Created connection id=$connection_id"
 fi
 
 echo "Creating/reusing 'qa-automation-dora' scope config..."
 existing_sc_id=$(curl -sf "$DEVLAKE_API_URL/plugins/github/connections/$connection_id/scope-configs" \
-    | python3 -c "import json,sys; scs=json.load(sys.stdin); print(next((s['id'] for s in scs if s['name']=='qa-automation-dora'), ''))" 2>/dev/null || echo "")
+    | "$PYTHON_BIN" -c "import json,sys; scs=json.load(sys.stdin); print(next((s['id'] for s in scs if s['name']=='qa-automation-dora'), ''))" 2>/dev/null || echo "")
 if [[ -n "$existing_sc_id" ]]; then
     scope_config_id="$existing_sc_id"
 else
     scope_config_id=$(curl -sf -X POST "$DEVLAKE_API_URL/plugins/github/connections/$connection_id/scope-configs" \
         -H "Content-Type: application/json" \
         -d "{\"name\": \"qa-automation-dora\", \"issueTypeBug\": \"bug\", \"issueTypeIncident\": \"incident\", \"issueTypeRequirement\": \"enhancement\", \"deploymentPattern\": \"$DEPLOYMENT_PATTERN\", \"productionPattern\": \"$PRODUCTION_PATTERN\"}" \
-        | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+        | "$PYTHON_BIN" -c "import json,sys; print(json.load(sys.stdin)['id'])")
 fi
 echo "Scope config id=$scope_config_id (bug='bug', incident='incident' issue-label mapping)"
 
 echo "Adding repo scopes: ${REPOS[*]}"
-scope_json=$(python3 -c "
+scope_json=$("$PYTHON_BIN" -c "
 import json
 repos = '${REPOS[*]}'.split()
 print(json.dumps({'data': [{'fullName': f'$GITHUB_ORG/{r}', 'scopeConfigId': $scope_config_id} for r in repos]}))
@@ -90,23 +95,24 @@ curl -sf -X PUT "$DEVLAKE_API_URL/plugins/github/connections/$connection_id/scop
 
 echo "GitHub connection '$CONN_NAME' (id=$connection_id) is configured with ${#REPOS[@]} repo scopes."
 
+JIRA_CONN_NAME="${GITHUB_ORG}-jira"
 if [[ -n "$JIRA_URL" ]]; then
     echo "Creating Jira connection (JIRA_URL is set)..."
     curl -sf -X POST "$DEVLAKE_API_URL/plugins/jira/connections" \
         -H "Content-Type: application/json" \
-        -d "{\"name\": \"autom8ion-jira\", \"endpoint\": \"${JIRA_URL%/}/rest/\", \"authMethod\": \"AccessToken\", \"username\": \"$JIRA_EMAIL\", \"password\": \"$JIRA_API_TOKEN\"}" \
+        -d "{\"name\": \"$JIRA_CONN_NAME\", \"endpoint\": \"${JIRA_URL%/}/rest/\", \"authMethod\": \"AccessToken\", \"username\": \"$JIRA_EMAIL\", \"password\": \"$JIRA_API_TOKEN\"}" \
         >/dev/null
-    echo "Jira connection created -- add its board(s) as scopes in the Config UI (Connections -> autom8ion-jira -> Add Data Scope)."
+    echo "Jira connection created -- add its board(s) as scopes in the Config UI (Connections -> $JIRA_CONN_NAME -> Add Data Scope)."
 else
     echo "JIRA_URL not set -- Jira stays seeded (see scripts/seed/generate_sample_data.py)."
 fi
 
-cat <<'EOF'
+cat <<EOF
 
 Next (one-time, ~2 minutes, in the Config UI): http://localhost:4000
   1. Projects -> New Project -> name it "qa-automation".
-  2. Add the "autom8ion-github" connection's scopes to the project
-     (and "autom8ion-jira" if you configured one).
+  2. Add the "$CONN_NAME" connection's scopes to the project
+     (and "$JIRA_CONN_NAME" if you configured one).
   3. Save, then click "Collect Data Now" to run the first blueprint.
 This is scripted-connections + UI-driven-project/blueprint by design --
 see ARCHITECTURE.md "Why the last step is manual".

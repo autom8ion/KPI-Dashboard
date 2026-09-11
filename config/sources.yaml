@@ -1,0 +1,33 @@
+# Single source of truth for which GitHub org/repos this KPI dashboard
+# watches. Edit this file -- not code -- to plug a different SDLC in:
+# qa_collector's ingestion, devlake/scripts/bootstrap.sh's GitHub
+# connection/scopes, and the demo seed script all read through
+# `qa_collector/config.py` instead of hardcoding repo names.
+# See README.md "Plugging in your own repos".
+
+github_org: autom8ion
+
+repos:
+  # id must match the GitHub repo name exactly -- it's used as both
+  # qa-postgres's repos.id and the second half of the DevLake scope's
+  # fullName ("<github_org>/<id>").
+  #
+  # framework: playwright | pytest | k6 -- selects qa_collector's test-case
+  # parsing path (see qa_collector/run.py's _cases_for_artifact). Omit it
+  # (or leave the key out) for a repo that has no test-result artifacts for
+  # qa_collector to ingest -- it still gets a DevLake connection scope, so
+  # its commits/PRs/issues still count toward DORA metrics.
+  - id: playwright-agentic
+    framework: playwright
+  - id: backend-agentic
+    framework: pytest
+  - id: k6-agentic
+    framework: k6
+  - id: KPI-Dashboard
+    # This repo itself: DevLake scope only, no test-result artifacts.
+
+# DORA deployment/change-failure signal: DEPLOYMENT_PATTERN/PRODUCTION_PATTERN
+# stay as environment variables in .env (see .env.example) rather than living
+# here, since they're workflow-name/environment-name regexes for whichever
+# one of the repos above is an actual deployable application -- see
+# docs/dora-metrics.md and devlake/scripts/bootstrap.sh's header comment.

@@ -44,8 +44,8 @@ clean:
 logs:
 	docker compose logs -f
 
-bootstrap: .env
-	bash devlake/scripts/bootstrap.sh
+bootstrap: .env venv
+	PYTHON_BIN=$(VENV_PY) bash devlake/scripts/bootstrap.sh
 
 seed: venv .env
 	set -a && . ./.env && set +a && $(VENV_PY) -m scripts.seed.generate_sample_data

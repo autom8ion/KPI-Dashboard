@@ -13,17 +13,17 @@ import json
 import sys
 
 from qa_collector import db, github_fetch
+from qa_collector.config import load as load_sources_config
 from qa_collector.flaky_detector import detect_flaky_tests
 from qa_collector.normalize import TestRun, upsert_test_run
 from qa_collector.parsers.ctrf_parser import is_ctrf_report, parse_ctrf
 from qa_collector.parsers.junit_parser import parse_junit_xml
 from qa_collector.parsers.k6_parser import parse_k6_summary
 
-REPOS = {
-    "playwright-agentic": {"org": "autom8ion", "framework": "playwright"},
-    "backend-agentic": {"org": "autom8ion", "framework": "pytest"},
-    "k6-agentic": {"org": "autom8ion", "framework": "k6"},
-}
+# Which repos qa_collector ingests, and which parsing path each one uses --
+# sourced from config/sources.yaml so plugging in a different org/repos is a
+# config edit, not a code edit. See qa_collector/config.py.
+REPOS = load_sources_config().qa_collector_repos()
 
 
 def _cases_for_artifact(artifact_key: str, raw: bytes, workflow_name: str) -> tuple[str, list]:

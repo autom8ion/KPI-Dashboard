@@ -1,0 +1,239 @@
+{
+  "id": null,
+  "uid": "qa-test-case-history",
+  "title": "QA Test Case History",
+  "description": "Drilldown target: the full run history of one specific test case (pass/fail timeline, duration, error messages, and a direct link to the GitHub Actions run / commit). Reached by clicking a test name in 'QA Automation KPIs' -- Flaky test leaderboard, Recent failures, or Failures matching selected tag(s) -- or pick a repo/suite/test manually below.",
+  "tags": ["qa", "kpi-dashboard", "drilldown"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "",
+  "time": { "from": "now-90d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "repo",
+        "label": "Repo",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT id FROM repos ORDER BY 1",
+        "refresh": 2,
+        "multi": false,
+        "includeAll": false,
+        "sort": 1
+      },
+      {
+        "name": "suite",
+        "label": "Suite",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT DISTINCT suite FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) ORDER BY 1",
+        "refresh": 2,
+        "multi": false,
+        "includeAll": false,
+        "sort": 1
+      },
+      {
+        "name": "test_name",
+        "label": "Test",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT DISTINCT test_name FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) AND suite IN (${suite:sqlstring}) ORDER BY 1",
+        "refresh": 2,
+        "multi": false,
+        "includeAll": false,
+        "sort": 1
+      },
+      {
+        "name": "branch",
+        "label": "Branch",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT DISTINCT branch FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) AND suite IN (${suite:sqlstring}) AND test_name IN (${test_name:sqlstring}) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pass rate (selected range)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 90 },
+              { "color": "green", "value": 97 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * sum(case when status='passed' then 1 else 0 end) / nullif(count(*) filter (where status in ('passed','failed')), 0), 1) AS pass_rate FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) AND suite IN (${suite:sqlstring}) AND test_name IN (${test_name:sqlstring}) AND branch IN (${branch:sqlstring})"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Total runs (selected range)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS total_runs FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) AND suite IN (${suite:sqlstring}) AND test_name IN (${test_name:sqlstring}) AND branch IN (${branch:sqlstring})"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Mean duration (selected range)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT round(avg(duration_ms)) AS mean_duration FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) AND suite IN (${suite:sqlstring}) AND test_name IN (${test_name:sqlstring}) AND branch IN (${branch:sqlstring}) AND duration_ms IS NOT NULL"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Currently flagged flaky?",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "No", "color": "green" } } },
+            { "type": "range", "options": { "from": 1, "to": 999999, "result": { "text": "Yes", "color": "red" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS is_flaky FROM flaky_tests WHERE is_active = true AND repo_id IN (${repo:sqlstring}) AND suite IN (${suite:sqlstring}) AND test_name IN (${test_name:sqlstring}) AND branch IN (${branch:sqlstring})"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Result timeline",
+      "description": "One block per run, colored by outcome.",
+      "type": "state-timeline",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 6 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "passed": { "color": "green", "index": 0 },
+                "failed": { "color": "red", "index": 1 },
+                "skipped": { "color": "yellow", "index": 2 }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, branch AS metric, status AS value FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) AND suite IN (${suite:sqlstring}) AND test_name IN (${test_name:sqlstring}) AND branch IN (${branch:sqlstring}) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Run history",
+      "description": "Every run of this test in the selected range. 'CI Run' opens the GitHub Actions run; 'Commit' opens the commit.",
+      "type": "table",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "github_org" },
+            "properties": [{ "id": "custom.hidden", "value": true }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "github_repo" },
+            "properties": [{ "id": "custom.hidden", "value": true }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "ci_run" },
+            "properties": [
+              { "id": "displayName", "value": "CI Run" },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open in GitHub Actions",
+                    "url": "https://github.com/${__data.fields.github_org}/${__data.fields.github_repo}/actions/runs/${__data.fields.ci_run}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "commit_sha" },
+            "properties": [
+              { "id": "displayName", "value": "Commit" },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open commit on GitHub",
+                    "url": "https://github.com/${__data.fields.github_org}/${__data.fields.github_repo}/commit/${__data.fields.commit_sha}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT vtcr.run_started_at AS time, vtcr.branch, vtcr.status, vtcr.duration_ms, vtcr.commit_sha, vtcr.error_message, tr.workflow_run_id AS ci_run, r.github_org, r.github_repo FROM v_test_case_results vtcr JOIN test_runs tr ON tr.id = vtcr.test_run_id JOIN repos r ON r.id = vtcr.repo_id WHERE vtcr.repo_id IN (${repo:sqlstring}) AND vtcr.suite IN (${suite:sqlstring}) AND vtcr.test_name IN (${test_name:sqlstring}) AND vtcr.branch IN (${branch:sqlstring}) ORDER BY vtcr.run_started_at DESC LIMIT 50"
+        }
+      ]
+    }
+  ]
+}

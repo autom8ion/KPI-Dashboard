@@ -6,10 +6,39 @@
   "tags": ["qa", "kpi-dashboard"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "editable": true,
   "refresh": "5m",
   "time": { "from": "now-30d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "repo",
+        "label": "Repo",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT id FROM repos ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      },
+      {
+        "name": "tag",
+        "label": "Failure tag",
+        "description": "Drill into 'Failures matching selected tag(s)' below -- click a bar in 'Failures by tag' to set this.",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT DISTINCT tag FROM v_test_case_results, unnest(tags) AS tag ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
@@ -36,7 +65,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT round(100.0 * sum(case when status='passed' then 1 else 0 end) / nullif(count(*) filter (where status in ('passed','failed')), 0), 1) AS pass_rate FROM v_test_case_results WHERE run_started_at >= now() - interval '7 days'"
+          "rawSql": "SELECT round(100.0 * sum(case when status='passed' then 1 else 0 end) / nullif(count(*) filter (where status in ('passed','failed')), 0), 1) AS pass_rate FROM v_test_case_results WHERE run_started_at >= now() - interval '7 days' AND repo_id IN (${repo:sqlstring})"
         }
       ]
     },
@@ -58,7 +87,14 @@
               { "color": "yellow", "value": 85 },
               { "color": "green", "value": 95 }
             ]
-          }
+          },
+          "links": [
+            {
+              "title": "Filter this dashboard to ${__data.fields.metric}",
+              "url": "/d/qa-automation-kpis/qa-automation-kpis?var-repo=${__data.fields.metric}&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
         },
         "overrides": []
       },
@@ -67,7 +103,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT repo_id AS metric, round(100.0 * sum(case when conclusion='success' then 1 else 0 end) / nullif(count(*), 0), 1) AS value FROM test_runs WHERE started_at >= now() - interval '30 days' GROUP BY 1 ORDER BY 1"
+          "rawSql": "SELECT repo_id AS metric, round(100.0 * sum(case when conclusion='success' then 1 else 0 end) / nullif(count(*), 0), 1) AS value FROM test_runs WHERE started_at >= now() - interval '30 days' AND repo_id IN (${repo:sqlstring}) GROUP BY 1 ORDER BY 1"
         }
       ]
     },
@@ -95,7 +131,7 @@
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT count(*) AS active_flaky FROM flaky_tests WHERE is_active = true"
+          "rawSql": "SELECT count(*) AS active_flaky FROM flaky_tests WHERE is_active = true AND repo_id IN (${repo:sqlstring})"
         }
       ]
     },
@@ -106,14 +142,26 @@
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 6 },
       "datasource": { "type": "postgres", "uid": "qa-postgres" },
       "fieldConfig": {
-        "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "drawStyle": "line", "spanNulls": true } },
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "drawStyle": "line", "spanNulls": true },
+          "links": [
+            {
+              "title": "Filter this dashboard to ${__field.labels.metric}",
+              "url": "/d/qa-automation-kpis/qa-automation-kpis?var-repo=${__field.labels.metric}&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT date_trunc('day', run_started_at) AS time, repo_id AS metric, round(100.0 * sum(case when status='passed' then 1 else 0 end) / nullif(count(*) filter (where status in ('passed','failed')), 0), 1) AS value FROM v_test_case_results WHERE run_started_at >= now() - interval '30 days' GROUP BY 1, 2 ORDER BY 1"
+          "rawSql": "SELECT date_trunc('day', run_started_at) AS time, repo_id AS metric, round(100.0 * sum(case when status='passed' then 1 else 0 end) / nullif(count(*) filter (where status in ('passed','failed')), 0), 1) AS value FROM v_test_case_results WHERE run_started_at >= now() - interval '30 days' AND repo_id IN (${repo:sqlstring}) GROUP BY 1, 2 ORDER BY 1"
         }
       ]
     },
@@ -124,14 +172,24 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "datasource": { "type": "postgres", "uid": "qa-postgres" },
       "fieldConfig": {
-        "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "spanNulls": true } },
+        "defaults": {
+          "unit": "ms",
+          "custom": { "drawStyle": "line", "spanNulls": true },
+          "links": [
+            {
+              "title": "Filter this dashboard to ${__field.labels.metric}",
+              "url": "/d/qa-automation-kpis/qa-automation-kpis?var-repo=${__field.labels.metric}&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
         "overrides": []
       },
       "targets": [
         {
           "refId": "A",
           "format": "time_series",
-          "rawSql": "SELECT date_trunc('day', run_started_at) AS time, repo_id AS metric, round(avg(duration_ms)) AS value FROM v_test_case_results WHERE run_started_at >= now() - interval '30 days' AND duration_ms IS NOT NULL GROUP BY 1, 2 ORDER BY 1"
+          "rawSql": "SELECT date_trunc('day', run_started_at) AS time, repo_id AS metric, round(avg(duration_ms)) AS value FROM v_test_case_results WHERE run_started_at >= now() - interval '30 days' AND duration_ms IS NOT NULL AND repo_id IN (${repo:sqlstring}) GROUP BY 1, 2 ORDER BY 1"
         }
       ]
     },
@@ -141,12 +199,23 @@
       "type": "barchart",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "datasource": { "type": "postgres", "uid": "qa-postgres" },
-      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "fieldConfig": {
+        "defaults": {
+          "links": [
+            {
+              "title": "Show failures tagged ${__data.fields.metric}",
+              "url": "/d/qa-automation-kpis/qa-automation-kpis?var-tag=${__data.fields.metric}&${__url_time_range}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT tag AS metric, count(*) AS value FROM v_test_case_results, unnest(tags) AS tag WHERE status = 'failed' AND run_started_at >= now() - interval '30 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 15"
+          "rawSql": "SELECT tag AS metric, count(*) AS value FROM v_test_case_results, unnest(tags) AS tag WHERE status = 'failed' AND run_started_at >= now() - interval '30 days' AND repo_id IN (${repo:sqlstring}) GROUP BY 1 ORDER BY 2 DESC LIMIT 15"
         }
       ]
     },
@@ -156,12 +225,31 @@
       "type": "table",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
       "datasource": { "type": "postgres", "uid": "qa-postgres" },
-      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "test_name" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View full run history for this test",
+                    "url": "/d/qa-test-case-history/qa-test-case-history?var-repo=${__data.fields.repo_id}&var-suite=${__data.fields.suite}&var-test_name=${__data.fields.test_name}&var-branch=${__data.fields.branch}&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT repo_id, suite, test_name, branch, flip_count, last_seen_at FROM flaky_tests WHERE is_active = true ORDER BY flip_count DESC, last_seen_at DESC LIMIT 20"
+          "rawSql": "SELECT repo_id, suite, test_name, branch, flip_count, last_seen_at FROM flaky_tests WHERE is_active = true AND repo_id IN (${repo:sqlstring}) ORDER BY flip_count DESC, last_seen_at DESC LIMIT 20"
         }
       ]
     },
@@ -171,12 +259,90 @@
       "type": "table",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
       "datasource": { "type": "postgres", "uid": "qa-postgres" },
-      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "github_org" },
+            "properties": [{ "id": "custom.hidden", "value": true }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "github_repo" },
+            "properties": [{ "id": "custom.hidden", "value": true }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "test_name" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View full run history for this test",
+                    "url": "/d/qa-test-case-history/qa-test-case-history?var-repo=${__data.fields.repo_id}&var-suite=${__data.fields.suite}&var-test_name=${__data.fields.test_name}&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "ci_run" },
+            "properties": [
+              { "id": "displayName", "value": "CI Run" },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open in GitHub Actions",
+                    "url": "https://github.com/${__data.fields.github_org}/${__data.fields.github_repo}/actions/runs/${__data.fields.ci_run}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
-          "rawSql": "SELECT run_started_at AS time, repo_id, suite, test_name, error_message FROM v_test_case_results WHERE status = 'failed' ORDER BY run_started_at DESC LIMIT 25"
+          "rawSql": "SELECT vtcr.run_started_at AS time, vtcr.repo_id, vtcr.suite, vtcr.test_name, vtcr.error_message, tr.workflow_run_id AS ci_run, r.github_org, r.github_repo FROM v_test_case_results vtcr JOIN test_runs tr ON tr.id = vtcr.test_run_id JOIN repos r ON r.id = vtcr.repo_id WHERE vtcr.status = 'failed' AND vtcr.repo_id IN (${repo:sqlstring}) ORDER BY vtcr.run_started_at DESC LIMIT 25"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Failures matching selected tag(s)",
+      "description": "Drilldown target for the 'Failures by tag' bar chart above -- pick a tag there, or from the $tag dropdown, to filter this table.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 31 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "test_name" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View full run history for this test",
+                    "url": "/d/qa-test-case-history/qa-test-case-history?var-repo=${__data.fields.repo_id}&var-suite=${__data.fields.suite}&var-test_name=${__data.fields.test_name}&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT run_started_at AS time, repo_id, suite, test_name, tags, error_message FROM v_test_case_results WHERE status = 'failed' AND run_started_at >= now() - interval '30 days' AND repo_id IN (${repo:sqlstring}) AND EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE tag IN (${tag:sqlstring})) ORDER BY run_started_at DESC LIMIT 25"
         }
       ]
     }

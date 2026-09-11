@@ -1,14 +1,15 @@
-# Polls playwright-agentic, backend-agentic and k6-agentic for newly
-# completed workflow runs and ingests their JUnit/k6-summary/CTRF artifacts into
-# qa-postgres. This is the "always-on" path for a real deployment where
-# qa-postgres is a persistently hosted database (not the local
-# docker-compose one `make demo` brings up) -- for the local demo, run
-# `make ingest` instead. See docs/qa-kpis.md.
+# Polls every repo in config/sources.yaml for newly completed workflow runs
+# and ingests their JUnit/k6-summary/CTRF artifacts into qa-postgres. This is
+# the "always-on" path for a real deployment where qa-postgres is a
+# persistently hosted database (not the local docker-compose one `make demo`
+# brings up) -- for the local demo, run `make ingest` instead. See
+# docs/qa-kpis.md.
 #
 # Requires two repo secrets:
 #   GH_PAT            fine-grained PAT with actions:read + contents:read on
-#                      the three sibling repos (the default GITHUB_TOKEN is
-#                      scoped only to this repo, not the org's others)
+#                      every repo in config/sources.yaml (the default
+#                      GITHUB_TOKEN is scoped only to this repo, not the
+#                      org's others)
 #   QA_POSTGRES_DSN    connection string for a reachable qa-postgres instance
 name: Collect QA metrics
 
