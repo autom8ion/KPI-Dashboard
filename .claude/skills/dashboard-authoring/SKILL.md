@@ -9,7 +9,7 @@ Goal: dashboards and datasources here are provisioned as code (`grafana/provisio
 
 ## 1. The two datasources, and which one a new panel needs
 
-- **`qa-postgres`** (uid `qa-postgres`) -- `qa_collector`'s own schema: `test_runs`, `test_case_results`, `flaky_tests`, and the `v_test_case_results` convenience view (join of the first two). Use this for anything test-case-level: pass rate, flaky tests, duration, tags, CI success rate. See `qa_collector/schema.sql` for the authoritative schema -- don't guess column names, read it.
+- **`qa-postgres`** (uid `qa-postgres`) -- `qa_collector`'s own schema: `test_runs`, `test_case_results`, `flaky_tests`, `k6_run_metrics`, and their convenience join views `v_test_case_results`/`v_k6_run_metrics`. Use this for anything test-case-level (pass rate, flaky tests, duration, tags, CI success rate -- `qa-automation-kpis.json`) or k6-performance-level (latency percentiles, throughput, error rate, concurrency -- `k6-performance.json`). See `qa_collector/schema.sql` for the authoritative schema -- don't guess column names, read it.
 - **DevLake's own MySQL datasource** -- provisioned automatically by DevLake's own Grafana image (not something this repo sets up). Use this only for DORA/PR/issue-level data that's genuinely DevLake's domain (deployments, change lead time, issues) -- and note DevLake's own DORA/Jira/Github dashboards (folder `General` in Grafana, distinct from this repo's `QA Automation` folder) already cover most of that; check those exist before building a duplicate panel here.
 
 ## 2. Adding a panel to `qa-automation-kpis.json`

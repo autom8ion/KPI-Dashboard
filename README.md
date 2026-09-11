@@ -35,6 +35,8 @@ No other file needs editing -- `make bootstrap`/`make seed`/`make ingest` all re
 
 ![QA Automation KPIs dashboard](docs/screenshots/qa-automation-kpis-dashboard.jpg)
 
+**k6 Performance** — a third dashboard (`grafana/dashboards/k6-performance.json`) for k6's own performance aggregates that don't fit a pass/fail shape: latency percentiles (avg/p90/p95/p99), throughput, error rate, and concurrency, trended per k6 script across CI runs, plus a run history table linking out to GitHub Actions. See `docs/qa-kpis.md` "k6 performance metrics" for what's captured and the (deliberate) build-over-build-trend-vs-live-load-test-view tradeoff.
+
 **DORA** — DevLake's own dashboard, computed from the same seeded deployments/incidents.
 
 ![DORA dashboard](docs/screenshots/dora-dashboard.jpg)
@@ -74,7 +76,7 @@ config/sources.yaml    The one file to edit to point this at a different org/rep
 qa_collector/           Test-result ingestion: GitHub Actions artifacts -> qa-postgres
 devlake/scripts/         DevLake connection/scope config-as-code
 scripts/seed/             Synthetic demo data generator
-grafana/                  Provisioned datasource + the QA Automation KPIs / Test Case History dashboards
+grafana/                  Provisioned datasource + the QA Automation KPIs / Test Case History / k6 Performance dashboards
 docs/                     Metric definitions and DORA source mapping
 .github/workflows/        The always-on ingestion + weekly report pipelines (for a real deployment)
 .claude/skills/           Claude Code skills for operating this stack (see CLAUDE.md)

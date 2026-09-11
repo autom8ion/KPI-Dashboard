@@ -15,10 +15,10 @@ import sys
 from qa_collector import db, github_fetch
 from qa_collector.config import load as load_sources_config
 from qa_collector.flaky_detector import detect_flaky_tests
-from qa_collector.normalize import TestRun, upsert_test_run
+from qa_collector.normalize import K6Metrics, TestRun, upsert_k6_metrics, upsert_test_run
 from qa_collector.parsers.ctrf_parser import is_ctrf_report, parse_ctrf
 from qa_collector.parsers.junit_parser import parse_junit_xml
-from qa_collector.parsers.k6_parser import parse_k6_summary
+from qa_collector.parsers.k6_parser import parse_k6_metrics, parse_k6_summary
 
 # Which repos qa_collector ingests, and which parsing path each one uses --
 # sourced from config/sources.yaml so plugging in a different org/repos is a
@@ -26,18 +26,21 @@ from qa_collector.parsers.k6_parser import parse_k6_summary
 REPOS = load_sources_config().qa_collector_repos()
 
 
-def _cases_for_artifact(artifact_key: str, raw: bytes, workflow_name: str) -> tuple[str, list]:
-    """Returns (source, cases). JSON artifacts are content-sniffed (CTRF vs.
-    k6 summary) rather than routed by artifact/file name, so this works
-    regardless of what a CI step happened to call the uploaded file."""
+def _cases_for_artifact(
+    artifact_key: str, raw: bytes, workflow_name: str
+) -> tuple[str, list, K6Metrics | None]:
+    """Returns (source, cases, k6_metrics). JSON artifacts are content-sniffed
+    (CTRF vs. k6 summary) rather than routed by artifact/file name, so this
+    works regardless of what a CI step happened to call the uploaded file.
+    k6_metrics is always None except for a k6-summary file."""
     if artifact_key.endswith(".xml"):
-        return "junit", parse_junit_xml(raw)
+        return "junit", parse_junit_xml(raw), None
     if artifact_key.endswith(".json"):
         data = json.loads(raw)
         if is_ctrf_report(data):
-            return "ctrf", parse_ctrf(data, default_suite=workflow_name)
-        return "k6-summary", parse_k6_summary(data, suite=workflow_name)
-    return "unknown", []
+            return "ctrf", parse_ctrf(data, default_suite=workflow_name), None
+        return "k6-summary", parse_k6_summary(data, suite=workflow_name), parse_k6_metrics(data)
+    return "unknown", [], None
 
 
 def ingest_repo(conn, repo_id: str, limit: int) -> int:
@@ -60,11 +63,22 @@ def ingest_repo(conn, repo_id: str, limit: int) -> int:
         for artifact_name, members in by_artifact.items():
             cases = []
             source = "unknown"
+            # One artifact can bundle multiple --summary-export files for
+            # different k6 scripts (confirmed against a real k6-agentic
+            # run) -- keep each file's metrics keyed by its own filename
+            # rather than collapsing to a single value, which would
+            # silently drop every file but the last.
+            k6_metrics_by_file: list[tuple[str, K6Metrics]] = []
             for key, raw in members:
-                file_source, file_cases = _cases_for_artifact(key, raw, run.workflow_name)
+                file_source, file_cases, file_k6_metrics = _cases_for_artifact(
+                    key, raw, run.workflow_name
+                )
                 if file_cases:
                     source = file_source
                     cases.extend(file_cases)
+                if file_k6_metrics is not None:
+                    source_file = key.split("/", 1)[1] if "/" in key else key
+                    k6_metrics_by_file.append((source_file, file_k6_metrics))
             if not cases:
                 continue
 
@@ -82,7 +96,9 @@ def ingest_repo(conn, repo_id: str, limit: int) -> int:
                 source=source,
                 cases=cases,
             )
-            upsert_test_run(conn, test_run)
+            test_run_id = upsert_test_run(conn, test_run)
+            for source_file, file_k6_metrics in k6_metrics_by_file:
+                upsert_k6_metrics(conn, test_run_id, source_file, file_k6_metrics)
             ingested += 1
     return ingested
 

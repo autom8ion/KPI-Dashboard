@@ -77,6 +77,8 @@ See `qa_collector/schema.sql` for the authoritative definitions (kept in one fil
 - **`test_case_results`** — one row per test case per run, `ON DELETE CASCADE` from `test_runs`.
 - **`flaky_tests`** — maintained by `qa_collector/flaky_detector.py`, recomputed on every ingest.
 - **`v_test_case_results`** — the join view almost every Grafana query and report query actually wants (test case + its run's repo/branch/commit/timestamp).
+- **`k6_run_metrics`** — k6's own run-level performance aggregates (latency percentiles, throughput, error rate, concurrency) that don't fit the pass/fail shape `test_case_results` uses. Idempotent upsert key: `(test_run_id, source_file)` — one row per k6 script per run, not per run, since one job can bundle multiple `--summary-export` files. See `docs/qa-kpis.md` "k6 performance metrics".
+- **`v_k6_run_metrics`** — the equivalent join view for `k6_run_metrics`.
 
 ## Claude Code skills
 
