@@ -27,7 +27,7 @@ import requests
 
 from qa_collector import db
 from qa_collector.config import load as load_sources_config
-from qa_collector.normalize import TestCase, TestRun, upsert_test_run
+from qa_collector.normalize import K6Metrics, TestCase, TestRun, upsert_k6_metrics, upsert_test_run
 
 RNG = random.Random(20260101)
 DAYS = 30
@@ -100,6 +100,50 @@ def _status_for(repo: str, suite: str, name: str, day_index: int) -> str:
     return "failed" if RNG.random() < 0.03 else "passed"
 
 
+# k6-agentic's seeded threshold text says "p(95)<500" (see REPO_SUITES
+# above). K6_PRIMARY_THRESHOLD's pass/fail is driven by this same `degraded`
+# flag (see seed_qa_postgres) rather than independent RNG like every other
+# seeded test case, so the k6 performance dashboard's numbers and the
+# threshold-check's pass/fail can never contradict each other on the same
+# day -- a real k6 run couldn't show a passing p(95)<500 threshold on a run
+# whose actual p95 was 600ms, and neither should this seed data.
+K6_PRIMARY_THRESHOLD = ("k6-agentic", "tests/rest/smoke.ts", "threshold: http_req_duration p(95)<500")
+K6_DEGRADED_PROBABILITY = 0.12
+
+
+def _k6_metrics_for(day_index: int, degraded: bool) -> K6Metrics:
+    jitter = RNG.uniform(-1, 1)
+    if degraded:
+        p95 = RNG.uniform(520, 720) + jitter * 20
+        error_rate = RNG.uniform(0.03, 0.12)
+    else:
+        p95 = RNG.uniform(220, 340) + jitter * 15
+        error_rate = RNG.uniform(0.0, 0.01)
+    p90 = p95 * RNG.uniform(0.72, 0.85)
+    avg = p90 * RNG.uniform(0.5, 0.65)
+    p99 = p95 * RNG.uniform(1.15, 1.4)
+    vus_max = RNG.randint(15, 40)
+    rps = RNG.uniform(60, 220)
+    duration_s = 120  # matches k6-agentic's smoke-test scenario length
+    reqs = round(rps * duration_s)
+    iterations = round(reqs * RNG.uniform(0.4, 0.6))
+    return K6Metrics(
+        vus_max=vus_max,
+        http_reqs_count=reqs,
+        http_reqs_rate=round(rps, 1),
+        http_req_failed_rate=round(error_rate, 4),
+        http_req_duration_avg_ms=round(avg, 1),
+        http_req_duration_p90_ms=round(p90, 1),
+        http_req_duration_p95_ms=round(p95, 1),
+        http_req_duration_p99_ms=round(p99, 1),
+        http_req_duration_max_ms=round(p99 * RNG.uniform(1.2, 1.8), 1),
+        iterations_count=iterations,
+        iterations_rate=round(iterations / duration_s, 2),
+        data_received_bytes=RNG.randint(500_000, 4_000_000),
+        data_sent_bytes=RNG.randint(50_000, 400_000),
+    )
+
+
 def seed_qa_postgres() -> None:
     conn = db.connect()
     db.ensure_schema(conn)
@@ -110,10 +154,14 @@ def seed_qa_postgres() -> None:
     for day_index in range(DAYS):
         run_time = now - timedelta(days=DAYS - day_index)
         for repo_id, suites in REPO_SUITES.items():
+            k6_degraded = repo_id == "k6-agentic" and RNG.random() < K6_DEGRADED_PROBABILITY
             cases: list[TestCase] = []
             for suite, names in suites.items():
                 for name in names:
-                    status = _status_for(repo_id, suite, name, day_index)
+                    if (repo_id, suite, name) == K6_PRIMARY_THRESHOLD:
+                        status = "failed" if k6_degraded else "passed"
+                    else:
+                        status = _status_for(repo_id, suite, name, day_index)
                     cases.append(
                         TestCase(
                             suite=suite,
@@ -139,7 +187,10 @@ def seed_qa_postgres() -> None:
                 source="seed",
                 cases=cases,
             )
-            upsert_test_run(conn, run)
+            test_run_id = upsert_test_run(conn, run)
+
+            if _SOURCES.qa_collector_repos()[repo_id]["framework"] == "k6":
+                upsert_k6_metrics(conn, test_run_id, "seed", _k6_metrics_for(day_index, k6_degraded))
     print(f"qa-postgres: seeded {DAYS} days x {len(REPO_SUITES)} repos")
 
 

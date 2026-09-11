@@ -25,3 +25,14 @@ Playwright tests carry their `@smoke`/`@regression`/`@api`/etc. tag directly in 
 ## Ingestion format
 
 qa_collector accepts three input formats, auto-detected per artifact (see the `qa-metrics-ingest` skill for the exact dispatch rule): JUnit XML, a k6 `--summary-export` JSON file, or a [CTRF](https://ctrf.io) JSON report. CTRF is framework-agnostic (one parser covers Playwright/Jest/Mocha/Cypress/pytest/etc. reporters alike) and is the preferred format for onboarding a new repo — see `new-source-onboarding`.
+
+## k6 performance metrics
+
+Separate from the pass/fail check/threshold rows above: a k6 `--summary-export` file's top-level `metrics` object also carries k6's own built-in run-level aggregates -- latency percentiles, throughput, error rate, concurrency -- that don't fit a pass/fail shape at all. `qa_collector/parsers/k6_parser.py`'s `parse_k6_metrics` extracts the well-known ones (`http_req_duration`'s avg/p90/p95/p99/max, `http_reqs`/`iterations` count and rate, `http_req_failed`'s rate, `vus_max`, `data_sent`/`data_received`) into `qa-postgres`'s `k6_run_metrics` table, visualized on the **k6 Performance** dashboard (`grafana/dashboards/k6-performance.json`).
+
+Two things worth knowing before touching this:
+
+- **One aggregate row per (CI run, k6 script), trended build-over-build** — not a live, per-second view. A single k6 script run is reduced to one row of percentiles/rates, the same way `test_case_results.duration_ms` reduces a test to one number per run; the dashboard's line charts show how that number moves across CI runs over time. This answers "is checkout's p95 drifting worse over the last 30 builds", not "show me this run's live VU ramp" — that second question is a fundamentally different k6 output mode (`xk6-output-prometheus-remote` or InfluxDB streaming *while the load test runs*, paired with k6's own real-time Grafana dashboards), which this repo's "parse an artifact after CI finishes" architecture doesn't produce and isn't trying to.
+- **Keyed on (test_run_id, source_file), not just test_run_id** — a single artifact/job can bundle multiple `--summary-export` files for genuinely different k6 scripts with different load profiles (confirmed against a real k6-agentic run: one `k6-summary` job's zip contained both a REST and a GraphQL summary file). The `k6-performance` dashboard's `$source_file` variable exists specifically to let a panel pick one script rather than silently averaging or overwriting between them.
+
+Nullable throughout by design: k6's default `summaryTrendStats` only guarantees avg/min/med/max/p(90)/p(95) for a Trend metric, and `http_req_failed` itself was only added in k6 v0.31 — a NULL column means the run's k6 version/config didn't report that stat, not a collector bug.

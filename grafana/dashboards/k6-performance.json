@@ -1,0 +1,319 @@
+{
+  "id": null,
+  "uid": "k6-performance",
+  "title": "k6 Performance",
+  "description": "Run-level k6 performance aggregates -- latency percentiles, throughput, error rate, concurrency -- trended across CI runs (qa_collector/parsers/k6_parser.py's parse_k6_metrics, qa-postgres's k6_run_metrics table). This trends build-over-build drift, not a live load-test view: k6's own real-time output (xk6-output-prometheus-remote or InfluxDB streaming during the run) is the right tool for a per-second VU-ramp/request-timeline dashboard -- see docs/qa-kpis.md 'k6 performance metrics'.",
+  "tags": ["qa", "kpi-dashboard", "k6"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "repo",
+        "label": "Repo",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT DISTINCT repo_id FROM v_k6_run_metrics ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      },
+      {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT DISTINCT job_name FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      },
+      {
+        "name": "source_file",
+        "label": "Script",
+        "description": "A single job (e.g. k6-agentic's 'k6-summary') can bundle multiple --summary-export files for different k6 scripts with different load profiles -- this disambiguates which one a panel is trending. See schema.sql's k6_run_metrics comment.",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "qa-postgres" },
+        "query": "SELECT DISTINCT source_file FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Latest p95 latency",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 400 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT http_req_duration_p95_ms FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY run_started_at DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Latest error rate",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.02 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT http_req_failed_rate FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY run_started_at DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Latest throughput",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT http_reqs_rate FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY run_started_at DESC LIMIT 1"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Threshold breaches (last 30 days)",
+      "description": "k6 checks/thresholds tagged k6-threshold that failed -- see the QA Automation KPIs dashboard's tag-based panels for the same data across all frameworks.",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS breaches FROM v_test_case_results WHERE repo_id IN (${repo:sqlstring}) AND 'k6-threshold' = ANY(tags) AND status = 'failed' AND run_started_at >= now() - interval '30 days'"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Response time percentiles trend (http_req_duration)",
+      "description": "avg/p90/p95/p99 per run, trended over time -- not a within-run distribution.",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 6 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "spanNulls": true } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' avg') AS metric, http_req_duration_avg_ms AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        },
+        {
+          "refId": "B",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' p90') AS metric, http_req_duration_p90_ms AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        },
+        {
+          "refId": "C",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' p95') AS metric, http_req_duration_p95_ms AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        },
+        {
+          "refId": "D",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' p99') AS metric, http_req_duration_p99_ms AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Error rate trend (http_req_failed)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "custom": { "drawStyle": "line", "spanNulls": true } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file) AS metric, http_req_failed_rate AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Throughput trend (requests/sec, iterations/sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": { "custom": { "drawStyle": "line", "spanNulls": true } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' req/s') AS metric, http_reqs_rate AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        },
+        {
+          "refId": "B",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' iter/s') AS metric, iterations_rate AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Concurrency trend (max VUs per run)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": { "min": 0, "custom": { "drawStyle": "bars", "spanNulls": true } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file) AS metric, vus_max AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Data transfer trend",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "spanNulls": true } },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' received') AS metric, data_received_bytes AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        },
+        {
+          "refId": "B",
+          "format": "time_series",
+          "rawSql": "SELECT run_started_at AS time, (job_name || '/' || source_file || ' sent') AS metric, data_sent_bytes AS value FROM v_k6_run_metrics WHERE repo_id IN (${repo:sqlstring}) AND job_name IN (${job:sqlstring}) AND source_file IN (${source_file:sqlstring}) ORDER BY 1"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Recent k6 runs",
+      "description": "'CI Run' opens the GitHub Actions run this row's metrics came from.",
+      "type": "table",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 31 },
+      "datasource": { "type": "postgres", "uid": "qa-postgres" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "github_org" },
+            "properties": [{ "id": "custom.hidden", "value": true }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "github_repo" },
+            "properties": [{ "id": "custom.hidden", "value": true }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "ci_run" },
+            "properties": [
+              { "id": "displayName", "value": "CI Run" },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open in GitHub Actions",
+                    "url": "https://github.com/${__data.fields.github_org}/${__data.fields.github_repo}/actions/runs/${__data.fields.ci_run}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawSql": "SELECT vkm.run_started_at AS time, vkm.repo_id, vkm.job_name, vkm.source_file, vkm.branch, vkm.http_req_duration_p95_ms, vkm.http_req_failed_rate, vkm.http_reqs_rate, vkm.vus_max, vkm.workflow_run_id AS ci_run, r.github_org, r.github_repo FROM v_k6_run_metrics vkm JOIN repos r ON r.id = vkm.repo_id WHERE vkm.repo_id IN (${repo:sqlstring}) AND vkm.job_name IN (${job:sqlstring}) AND vkm.source_file IN (${source_file:sqlstring}) ORDER BY vkm.run_started_at DESC LIMIT 25"
+        }
+      ]
+    }
+  ]
+}

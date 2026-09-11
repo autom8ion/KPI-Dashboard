@@ -27,6 +27,26 @@ class TestCase:
 
 
 @dataclass
+class K6Metrics:
+    """Run-level k6 performance aggregates -- see schema.sql's
+    k6_run_metrics for what each field means and why most are nullable."""
+
+    vus_max: int | None = None
+    http_reqs_count: int | None = None
+    http_reqs_rate: float | None = None
+    http_req_failed_rate: float | None = None
+    http_req_duration_avg_ms: float | None = None
+    http_req_duration_p90_ms: float | None = None
+    http_req_duration_p95_ms: float | None = None
+    http_req_duration_p99_ms: float | None = None
+    http_req_duration_max_ms: float | None = None
+    iterations_count: int | None = None
+    iterations_rate: float | None = None
+    data_received_bytes: int | None = None
+    data_sent_bytes: int | None = None
+
+
+@dataclass
 class TestRun:
     repo_id: str
     workflow_run_id: int
@@ -117,3 +137,60 @@ def upsert_test_run(conn: psycopg.Connection, run: TestRun) -> int:
             )
     conn.commit()
     return test_run_id
+
+
+def upsert_k6_metrics(
+    conn: psycopg.Connection, test_run_id: int, source_file: str, metrics: K6Metrics
+) -> None:
+    """Insert or replace one k6_run_metrics row. Idempotent on
+    (test_run_id, source_file) -- re-ingesting the same run overwrites the
+    same row rather than duplicating it, same guarantee as upsert_test_run.
+    source_file (e.g. 'k6-rest-summary.json') distinguishes multiple
+    --summary-export files bundled under one artifact/test_runs row --
+    see schema.sql's k6_run_metrics comment for why that happens in
+    practice and why collapsing them to one row per run is wrong."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO k6_run_metrics
+                (test_run_id, source_file, vus_max, http_reqs_count,
+                 http_reqs_rate, http_req_failed_rate,
+                 http_req_duration_avg_ms, http_req_duration_p90_ms,
+                 http_req_duration_p95_ms, http_req_duration_p99_ms,
+                 http_req_duration_max_ms, iterations_count,
+                 iterations_rate, data_received_bytes, data_sent_bytes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (test_run_id, source_file) DO UPDATE SET
+                vus_max = EXCLUDED.vus_max,
+                http_reqs_count = EXCLUDED.http_reqs_count,
+                http_reqs_rate = EXCLUDED.http_reqs_rate,
+                http_req_failed_rate = EXCLUDED.http_req_failed_rate,
+                http_req_duration_avg_ms = EXCLUDED.http_req_duration_avg_ms,
+                http_req_duration_p90_ms = EXCLUDED.http_req_duration_p90_ms,
+                http_req_duration_p95_ms = EXCLUDED.http_req_duration_p95_ms,
+                http_req_duration_p99_ms = EXCLUDED.http_req_duration_p99_ms,
+                http_req_duration_max_ms = EXCLUDED.http_req_duration_max_ms,
+                iterations_count = EXCLUDED.iterations_count,
+                iterations_rate = EXCLUDED.iterations_rate,
+                data_received_bytes = EXCLUDED.data_received_bytes,
+                data_sent_bytes = EXCLUDED.data_sent_bytes
+            """,
+            (
+                test_run_id,
+                source_file,
+                metrics.vus_max,
+                metrics.http_reqs_count,
+                metrics.http_reqs_rate,
+                metrics.http_req_failed_rate,
+                metrics.http_req_duration_avg_ms,
+                metrics.http_req_duration_p90_ms,
+                metrics.http_req_duration_p95_ms,
+                metrics.http_req_duration_p99_ms,
+                metrics.http_req_duration_max_ms,
+                metrics.iterations_count,
+                metrics.iterations_rate,
+                metrics.data_received_bytes,
+                metrics.data_sent_bytes,
+            ),
+        )
+    conn.commit()
